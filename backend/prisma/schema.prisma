@@ -1,0 +1,97 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  rollNo    String?  @unique
+  name      String
+  email     String?  @unique
+  password  String
+  role      Role
+  branch    String?
+  year      Int?
+
+  groups    GroupMember[]
+  messages  Message[]
+
+  sentPrivateMessages     PrivateMessage[] @relation("Sender")
+  receivedPrivateMessages PrivateMessage[] @relation("Receiver")
+
+  studentLeaves LeaveRequest[] @relation("StudentLeave")
+  teacherLeaves LeaveRequest[] @relation("TeacherLeave")
+
+  createdAt DateTime @default(now())
+}
+
+model Group {
+  id        Int      @id @default(autoincrement())
+  name      String
+  branch    String
+  year      Int
+
+  members   GroupMember[]
+  messages  Message[]
+
+  createdAt DateTime @default(now())
+}
+
+model GroupMember {
+  id      Int  @id @default(autoincrement())
+
+  userId  Int
+  groupId Int
+
+  user    User  @relation(fields: [userId], references: [id])
+  group   Group @relation(fields: [groupId], references: [id])
+}
+
+model Message {
+  id        Int      @id @default(autoincrement())
+  content   String
+
+  senderId  Int
+  groupId   Int
+
+  sender    User  @relation(fields: [senderId], references: [id])
+  group     Group @relation(fields: [groupId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+model PrivateMessage {
+  id          Int      @id @default(autoincrement())
+  content     String
+
+  senderId    Int
+  receiverId  Int
+
+  sender      User @relation("Sender", fields: [senderId], references: [id])
+  receiver    User @relation("Receiver", fields: [receiverId], references: [id])
+
+  createdAt   DateTime @default(now())
+}
+
+model LeaveRequest {
+  id        Int      @id @default(autoincrement())
+  reason    String
+  status    String   @default("PENDING")
+
+  studentId Int
+  teacherId Int
+
+  student   User @relation("StudentLeave", fields: [studentId], references: [id])
+  teacher   User @relation("TeacherLeave", fields: [teacherId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+}
