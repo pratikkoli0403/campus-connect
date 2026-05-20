@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Socket.io Chat Test</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 640px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+    }
+    h1 { font-size: 1.25rem; margin-bottom: 1rem; }
+    .row {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+    input {
+      flex: 1;
+      padding: 0.5rem;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      padding: 0.5rem 1rem;
+      border: none;
+      border-radius: 4px;
+      background: #2563eb;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:hover { background: #1d4ed8; }
+    #status {
+      font-size: 0.875rem;
+      color: #666;
+      margin-bottom: 1rem;
+    }
+    #messages {
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      min-height: 300px;
+      max-height: 400px;
+      overflow-y: auto;
+      padding: 0.75rem;
+      background: #fafafa;
+    }
+    .message {
+      padding: 0.5rem;
+      margin-bottom: 0.5rem;
+      background: #fff;
+      border-radius: 4px;
+      border: 1px solid #eee;
+    }
+    .message .meta {
+      font-size: 0.75rem;
+      color: #888;
+      margin-bottom: 0.25rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>Socket.io Chat Test</h1>
+  <p id="status">Connecting...</p>
+
+  <div class="row">
+    <input type="number" id="groupId" placeholder="Group ID" min="1" />
+    <button id="joinBtn">Join Group</button>
+  </div>
+
+  <div class="row">
+    <input type="number" id="senderId" placeholder="Sender ID (user id)" min="1" />
+  </div>
+
+  <div class="row">
+    <input type="text" id="messageInput" placeholder="Type a message..." />
+    <button id="sendBtn">Send Message</button>
+  </div>
+
+  <div id="messages"></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script>
+    const socket = io("http://localhost:5000");
+
+    const statusEl = document.getElementById("status");
+    const groupIdEl = document.getElementById("groupId");
+    const senderIdEl = document.getElementById("senderId");
+    const messageInputEl = document.getElementById("messageInput");
+    const messagesEl = document.getElementById("messages");
+
+    socket.on("connect", () => {
+      statusEl.textContent = "Connected: " + socket.id;
+    });
+
+    socket.on("disconnect", () => {
+      statusEl.textContent = "Disconnected";
+    });
+
+    socket.on("connect_error", (err) => {
+      statusEl.textContent = "Connection error: " + err.message;
+    });
+
+    document.getElementById("joinBtn").addEventListener("click", () => {
+      const groupId = groupIdEl.value.trim();
+      if (!groupId) return;
+      socket.emit("joinGroup", { groupId: Number(groupId) });
+      statusEl.textContent = "Joined group " + groupId;
+    });
+
+    document.getElementById("sendBtn").addEventListener("click", sendMessage);
+    messageInputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") sendMessage();
+    });
+
+    function sendMessage() {
+      const content = messageInputEl.value.trim();
+      const groupId = groupIdEl.value.trim();
+      const senderId = senderIdEl.value.trim();
+
+      if (!content || !groupId || !senderId) return;
+
+      socket.emit("sendMessage", {
+        content,
+        groupId: Number(groupId),
+        senderId: Number(senderId),
+      });
+
+      messageInputEl.value = "";
+    }
+
+    socket.on("receiveMessage", (msg) => {
+      const div = document.createElement("div");
+      div.className = "message";
+
+      const senderName = msg.sender?.name || "User " + msg.senderId;
+      div.innerHTML =
+        '<div class="meta">' +
+        senderName +
+        " &middot; Group " +
+        msg.groupId +
+        "</div>" +
+        "<div>" +
+        escapeHtml(msg.content) +
+        "</div>";
+
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    });
+
+    function escapeHtml(text) {
+      const el = document.createElement("span");
+      el.textContent = text;
+      return el.innerHTML;
+    }
+  </script>
+</body>
+</html>
