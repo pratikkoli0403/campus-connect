@@ -10,7 +10,7 @@ app.use(cors());
 app.use(express.json());
 
 app.get("/", (req, res) => {
-  res.send("CampusConnect API is running 🚀");
+  res.send("new backend active");
 });
 
 const PORT = process.env.PORT || 5000;
@@ -18,3 +18,6 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+const authRoutes = require("./routes/auth.routes");
+
+app.use("/api/auth", authRoutes);
