@@ -8,6 +8,7 @@ const pool = require("./config/db");
 const authRoutes = require("./routes/auth.routes");
 const groupRoutes = require("./routes/group.routes");
 const messageRoutes = require("./routes/message.routes");
+const announcementRoutes = require("./routes/announcement.routes");
 const authMiddleware = require("./middleware/auth.middleware");
 const setupChatSocket = require("./sockets/chat.socket");
 
@@ -23,6 +24,7 @@ app.get("/", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/groups", groupRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/announcements", announcementRoutes);
 
 app.get("/api/protected", authMiddleware, (req, res) => {
   res.json({

@@ -8,17 +8,18 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  rollNo    String?  @unique
-  name      String
-  email     String?  @unique
-  password  String
-  role      Role
-  branch    String?
-  year      Int?
+  id       Int     @id @default(autoincrement())
+  rollNo   String? @unique
+  name     String
+  email    String? @unique
+  password String
+  role     Role
+  branch   String?
+  year     Int?
 
-  groups    GroupMember[]
-  messages  Message[]
+  groups        GroupMember[]
+  messages      Message[]
+  announcements Announcement[]
 
   sentPrivateMessages     PrivateMessage[] @relation("Sender")
   receivedPrivateMessages PrivateMessage[] @relation("Receiver")
@@ -30,63 +31,78 @@ model User {
 }
 
 model Group {
-  id        Int      @id @default(autoincrement())
-  name      String
-  branch    String
-  year      Int
+  id     Int    @id @default(autoincrement())
+  name   String
+  branch String
+  year   Int
 
-  members   GroupMember[]
-  messages  Message[]
+  members       GroupMember[]
+  messages      Message[]
+  announcements Announcement[]
 
   createdAt DateTime @default(now())
 }
 
 model GroupMember {
-  id      Int  @id @default(autoincrement())
+  id Int @id @default(autoincrement())
 
   userId  Int
   groupId Int
 
-  user    User  @relation(fields: [userId], references: [id])
-  group   Group @relation(fields: [groupId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+  group Group @relation(fields: [groupId], references: [id])
 }
 
 model Message {
-  id        Int      @id @default(autoincrement())
-  content   String
+  id      Int    @id @default(autoincrement())
+  content String
 
-  senderId  Int
+  senderId Int
+  groupId  Int
+
+  sender User  @relation(fields: [senderId], references: [id])
+  group  Group @relation(fields: [groupId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+model Announcement {
+  id      Int    @id @default(autoincrement())
+  title   String
+  content String
+
   groupId   Int
+  createdBy Int
 
-  sender    User  @relation(fields: [senderId], references: [id])
-  group     Group @relation(fields: [groupId], references: [id])
+  group   Group @relation(fields: [groupId], references: [id])
+  creator User  @relation(fields: [createdBy], references: [id])
 
   createdAt DateTime @default(now())
 }
 
 model PrivateMessage {
-  id          Int      @id @default(autoincrement())
-  content     String
+  id      Int    @id @default(autoincrement())
+  content String
 
-  senderId    Int
-  receiverId  Int
+  senderId   Int
+  receiverId Int
 
-  sender      User @relation("Sender", fields: [senderId], references: [id])
-  receiver    User @relation("Receiver", fields: [receiverId], references: [id])
+  sender   User @relation("Sender", fields: [senderId], references: [id])
+  receiver User @relation("Receiver", fields: [receiverId], references: [id])
 
-  createdAt   DateTime @default(now())
+  createdAt DateTime @default(now())
 }
 
 model LeaveRequest {
-  id        Int      @id @default(autoincrement())
-  reason    String
-  status    String   @default("PENDING")
+  id     Int    @id @default(autoincrement())
+  reason String
+  status String @default("PENDING")
 
   studentId Int
   teacherId Int
 
-  student   User @relation("StudentLeave", fields: [studentId], references: [id])
-  teacher   User @relation("TeacherLeave", fields: [teacherId], references: [id])
+  student User @relation("StudentLeave", fields: [studentId], references: [id])
+  teacher User @relation("TeacherLeave", fields: [teacherId], references: [id])
 
   createdAt DateTime @default(now())
 }

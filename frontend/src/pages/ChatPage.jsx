@@ -1,10 +1,11 @@
 import socket from "../sockets/socket";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
   Hash,
   Loader2,
   Menu,
+  Megaphone,
   MoreVertical,
   Paperclip,
   Pin,
@@ -14,9 +15,13 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { useAuth } from "../context/AuthContext.jsx";
+import { useAuth } from "../context/authContext.js";
 import { getGroupMembers, getGroups } from "../services/groupService.js";
 import { getMessages } from "../services/messageService";
+import {
+  createAnnouncement,
+  getAnnouncements,
+} from "../services/announcementService.js";
 
 function getStoredUser() {
   try {
@@ -32,6 +37,19 @@ function formatMessageTime(iso) {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function formatAnnouncementTime(iso) {
+  return new Date(iso).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function canManageAnnouncements(role) {
+  return ["ADMIN", "FACULTY", "TEACHER"].includes(role);
 }
 
 function getInitials(name) {
@@ -193,6 +211,151 @@ function MessageRow({ message, showHeader, isOwn, isSenderOnline }) {
   );
 }
 
+function AnnouncementCard({ announcement }) {
+  const creator = announcement.creator ?? {
+    id: announcement.createdBy,
+    name: "CampusConnect",
+    role: "ADMIN",
+  };
+
+  return (
+    <article className="rounded-lg border border-[#3f4147]/80 bg-[#2b2d31] p-3 shadow-sm sm:p-4">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#faa61a]/15 text-[#faa61a] ring-1 ring-[#faa61a]/25">
+          <Megaphone className="h-4 w-4" aria-hidden />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+            <h3 className="break-words text-sm font-semibold text-[#f2f3f5] sm:text-[15px]">
+              {announcement.title}
+            </h3>
+            <time
+              dateTime={announcement.createdAt}
+              className="shrink-0 text-xs text-[#949ba4]"
+            >
+              {formatAnnouncementTime(announcement.createdAt)}
+            </time>
+          </div>
+          <p className="mt-1 text-xs font-medium text-[#b5bac1]">
+            {creator.name} · {creator.role}
+          </p>
+          <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-[#dbdee1]">
+            {announcement.content}
+          </p>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function AnnouncementsSection({
+  announcements,
+  loading,
+  error,
+  canCreate,
+  title,
+  content,
+  createLoading,
+  createError,
+  onTitleChange,
+  onContentChange,
+  onSubmit,
+}) {
+  return (
+    <section className="mx-2 mb-4 rounded-lg border border-[#1e1f22]/70 bg-[#313338] p-3 shadow-sm sm:mx-4 sm:p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Megaphone className="h-5 w-5 shrink-0 text-[#faa61a]" />
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-semibold text-[#f2f3f5]">
+              Announcements
+            </h2>
+            <p className="truncate text-xs text-[#949ba4]">
+              {announcements.length} posted
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {canCreate && (
+        <form
+          onSubmit={onSubmit}
+          className="mb-3 rounded-lg border border-[#3f4147]/70 bg-[#2b2d31] p-3"
+        >
+          <div className="grid gap-2">
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => onTitleChange(e.target.value)}
+              placeholder="Announcement title"
+              maxLength={140}
+              className="w-full rounded-md border border-transparent bg-[#1e1f22] px-3 py-2 text-sm text-[#f2f3f5] placeholder:text-[#6d6f78] outline-none transition-all focus:border-[#faa61a]/60 focus:ring-2 focus:ring-[#faa61a]/20"
+            />
+            <textarea
+              value={content}
+              onChange={(e) => onContentChange(e.target.value)}
+              placeholder="Share an update with this group"
+              rows={3}
+              className="max-h-36 min-h-20 w-full resize-y rounded-md border border-transparent bg-[#1e1f22] px-3 py-2 text-sm text-[#f2f3f5] placeholder:text-[#6d6f78] outline-none transition-all focus:border-[#faa61a]/60 focus:ring-2 focus:ring-[#faa61a]/20"
+            />
+          </div>
+
+          {createError && (
+            <p
+              role="alert"
+              className="mt-2 rounded-md border border-[#ed4245]/30 bg-[#ed4245]/10 px-3 py-2 text-xs text-[#f23f42]"
+            >
+              {createError}
+            </p>
+          )}
+
+          <div className="mt-3 flex justify-end">
+            <button
+              type="submit"
+              disabled={createLoading || !title.trim() || !content.trim()}
+              className="inline-flex items-center gap-2 rounded-md bg-[#faa61a] px-3 py-2 text-sm font-semibold text-[#1e1f22] transition-colors hover:bg-[#e99a18] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#faa61a]"
+            >
+              {createLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Megaphone className="h-4 w-4" />
+              )}
+              Post
+            </button>
+          </div>
+        </form>
+      )}
+
+      {loading ? (
+        <div className="flex items-center gap-2 rounded-lg bg-[#2b2d31] px-3 py-3 text-sm text-[#949ba4]">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          Loading announcements...
+        </div>
+      ) : error ? (
+        <p
+          role="alert"
+          className="rounded-lg border border-[#ed4245]/30 bg-[#ed4245]/10 px-3 py-3 text-sm text-[#f23f42]"
+        >
+          {error}
+        </p>
+      ) : announcements.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-[#3f4147] bg-[#2b2d31]/70 px-3 py-4 text-sm text-[#949ba4]">
+          No announcements yet.
+        </div>
+      ) : (
+        <div className="grid gap-2">
+          {announcements.map((announcement) => (
+            <AnnouncementCard
+              key={announcement.id}
+              announcement={announcement}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function ChatPage() {
   const { user } = useAuth();
   const [groups, setGroups] = useState([]);
@@ -203,6 +366,14 @@ function ChatPage() {
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
+  const [announcements, setAnnouncements] = useState([]);
+  const [announcementsLoading, setAnnouncementsLoading] = useState(false);
+  const [announcementsError, setAnnouncementsError] = useState("");
+  const [announcementTitle, setAnnouncementTitle] = useState("");
+  const [announcementContent, setAnnouncementContent] = useState("");
+  const [announcementCreateLoading, setAnnouncementCreateLoading] =
+    useState(false);
+  const [announcementCreateError, setAnnouncementCreateError] = useState("");
   const [groupSearch, setGroupSearch] = useState("");
   const [onlineUserIds, setOnlineUserIds] = useState(() => new Set());
   const [membersOpen, setMembersOpen] = useState(false);
@@ -224,20 +395,22 @@ function ChatPage() {
     return formatTypingLabel(names);
   }, [typingUsers]);
 
-  function clearTypingExpiry(key) {
+  const canCreateAnnouncements = canManageAnnouncements(user?.role);
+
+  const clearTypingExpiry = useCallback((key) => {
     const timer = typingExpiryTimersRef.current.get(key);
     if (timer) {
       clearTimeout(timer);
       typingExpiryTimersRef.current.delete(key);
     }
-  }
+  }, []);
 
-  function clearAllTypingExpiry() {
+  const clearAllTypingExpiry = useCallback(() => {
     typingExpiryTimersRef.current.forEach((timer) => clearTimeout(timer));
     typingExpiryTimersRef.current.clear();
-  }
+  }, []);
 
-  function emitStopTyping(groupId = selectedGroupId) {
+  const emitStopTyping = useCallback((groupId = selectedGroupId) => {
     if (groupId == null || !user?.name) return;
 
     clearTimeout(stopTypingTimerRef.current);
@@ -249,7 +422,7 @@ function ChatPage() {
       userId: user.id,
       userName: user.name,
     });
-  }
+  }, [selectedGroupId, user]);
 
   function emitTyping() {
     if (selectedGroupId == null || !user?.name) return;
@@ -275,7 +448,7 @@ function ChatPage() {
     );
   }
 
-  function addTypingUser(key, userName) {
+  const addTypingUser = useCallback((key, userName) => {
     setTypingUsers((prev) => {
       const next = new Map(prev);
       next.set(key, userName);
@@ -294,16 +467,16 @@ function ChatPage() {
         typingExpiryTimersRef.current.delete(key);
       }, TYPING_STALE_MS)
     );
-  }
+  }, [clearTypingExpiry]);
 
-  function removeTypingUser(key) {
+  const removeTypingUser = useCallback((key) => {
     clearTypingExpiry(key);
     setTypingUsers((prev) => {
       const next = new Map(prev);
       next.delete(key);
       return next;
     });
-  }
+  }, [clearTypingExpiry]);
 
   useEffect(() => {
     let cancelled = false;
@@ -387,6 +560,40 @@ function ChatPage() {
   }, [selectedGroupId]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadAnnouncements() {
+      if (selectedGroupId == null) {
+        setAnnouncements([]);
+        setAnnouncementsError("");
+        return;
+      }
+
+      setAnnouncementsLoading(true);
+      setAnnouncementsError("");
+      setAnnouncementCreateError("");
+      try {
+        const data = await getAnnouncements(selectedGroupId);
+        if (!cancelled) setAnnouncements(data ?? []);
+      } catch (err) {
+        if (!cancelled) {
+          setAnnouncements([]);
+          setAnnouncementsError(
+            err.response?.data?.message ?? "Failed to load announcements."
+          );
+        }
+      } finally {
+        if (!cancelled) setAnnouncementsLoading(false);
+      }
+    }
+
+    loadAnnouncements();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedGroupId]);
+
+  useEffect(() => {
     if (selectedGroupId == null) return;
 
     socket.emit("joinGroup", { groupId: selectedGroupId });
@@ -408,15 +615,15 @@ function ChatPage() {
   }, [selectedGroupId]);
 
   useEffect(() => {
-    if (selectedGroupId == null) {
-      setTypingUsers(new Map());
-      clearAllTypingExpiry();
-      return;
-    }
+    if (selectedGroupId == null) return;
 
     const onUserTyping = ({ groupId, userId, userName }) => {
       if (Number(groupId) !== Number(selectedGroupId)) return;
-      if (user?.id != null && userId != null && Number(userId) === Number(user.id)) {
+      if (
+        user?.id != null &&
+        userId != null &&
+        Number(userId) === Number(user.id)
+      ) {
         return;
       }
 
@@ -440,17 +647,24 @@ function ChatPage() {
       clearAllTypingExpiry();
       clearTimeout(stopTypingTimerRef.current);
     };
-  }, [selectedGroupId, user?.id, user?.name]);
+  }, [
+    addTypingUser,
+    clearAllTypingExpiry,
+    emitStopTyping,
+    removeTypingUser,
+    selectedGroupId,
+    user?.id,
+  ]);
 
   useEffect(() => {
-    if (selectedGroupId == null) {
-      setGroupMembers([]);
-      return;
-    }
-
     let cancelled = false;
 
     async function loadMembers() {
+      if (selectedGroupId == null) {
+        setGroupMembers([]);
+        return;
+      }
+
       setMembersLoading(true);
       try {
         const data = await getGroupMembers(selectedGroupId);
@@ -539,8 +753,40 @@ function ChatPage() {
     scheduleStopTyping();
   }
 
+  async function handleCreateAnnouncement(e) {
+    e.preventDefault();
+    if (!selectedGroup || !canCreateAnnouncements) return;
+
+    const title = announcementTitle.trim();
+    const content = announcementContent.trim();
+    if (!title || !content) return;
+
+    setAnnouncementCreateLoading(true);
+    setAnnouncementCreateError("");
+
+    try {
+      const created = await createAnnouncement({
+        groupId: selectedGroup.id,
+        title,
+        content,
+      });
+      setAnnouncements((prev) => [created, ...prev]);
+      setAnnouncementTitle("");
+      setAnnouncementContent("");
+    } catch (err) {
+      setAnnouncementCreateError(
+        err.response?.data?.message ?? "Failed to create announcement."
+      );
+    } finally {
+      setAnnouncementCreateLoading(false);
+    }
+  }
+
   function selectGroup(id) {
     setSelectedGroupId(id);
+    setAnnouncementTitle("");
+    setAnnouncementContent("");
+    setAnnouncementCreateError("");
     setSidebarOpen(false);
   }
 
@@ -838,6 +1084,21 @@ function ChatPage() {
         {/* Messages */}
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth">
           <div className="w-full space-y-0.5 py-3 sm:py-4 md:mx-auto md:max-w-4xl">
+            {!groupsLoading && selectedGroup && (
+              <AnnouncementsSection
+                announcements={announcements}
+                loading={announcementsLoading}
+                error={announcementsError}
+                canCreate={canCreateAnnouncements}
+                title={announcementTitle}
+                content={announcementContent}
+                createLoading={announcementCreateLoading}
+                createError={announcementCreateError}
+                onTitleChange={setAnnouncementTitle}
+                onContentChange={setAnnouncementContent}
+                onSubmit={handleCreateAnnouncement}
+              />
+            )}
             {groupsLoading ? (
               <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
                 <Loader2
