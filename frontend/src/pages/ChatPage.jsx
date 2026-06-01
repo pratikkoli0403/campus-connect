@@ -1,3 +1,4 @@
+import SettingsPanel from "../components/SettingsPanel";
 import socket from "../sockets/socket";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -15,7 +16,9 @@ import {
   Save,
   Search,
   Send,
+  Settings,
   Smile,
+  Upload,
   Users,
   X,
 } from "lucide-react";
@@ -35,6 +38,8 @@ import {
   getMyAttendance,
   updateAttendance,
 } from "../services/attendanceService.js";
+import { importStudents } from "../services/adminService.js";
+import { changePassword } from "../services/authService.js";
 
 function getStoredUser() {
   try {
@@ -410,6 +415,171 @@ function FilesSection({ files, loading, error }) {
   );
 }
 
+function StudentImportPanel({
+  fileName,
+  loading,
+  result,
+  error,
+  onFileChange,
+  onSubmit,
+}) {
+  const credentials = result?.credentials ?? [];
+  const credentialText = credentials
+    .map((credential) =>
+      [
+        credential.name,
+        credential.rollNo,
+        credential.temporaryPassword,
+        credential.group?.name ?? "Unassigned",
+      ].join("\t")
+    )
+    .join("\n");
+
+  return (
+    <section className="mx-2 mb-4 rounded-lg border border-[#1e1f22]/70 bg-[#313338] p-3 shadow-sm sm:mx-4 sm:p-4">
+      <div className="mb-3 flex min-w-0 items-center gap-2">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#5865f2]/15 text-[#b8c0ff] ring-1 ring-[#5865f2]/25">
+          <Upload className="h-5 w-5" aria-hidden />
+        </div>
+        <div className="min-w-0">
+          <h2 className="truncate text-sm font-semibold text-[#f2f3f5]">
+            Bulk student import
+          </h2>
+          <p className="truncate text-xs text-[#949ba4]">
+            Upload CSV or XLSX with name, rollNo, branch, year
+          </p>
+        </div>
+      </div>
+
+      <form onSubmit={onSubmit} className="grid gap-2 sm:grid-cols-[1fr_auto]">
+        <label className="flex min-h-11 cursor-pointer items-center rounded-md border border-dashed border-[#3f4147] bg-[#2b2d31] px-3 text-sm text-[#b5bac1] transition-colors hover:border-[#5865f2]/60 hover:text-[#f2f3f5]">
+          <input
+            key={fileName || "empty-import-file"}
+            type="file"
+            accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            className="sr-only"
+            onChange={onFileChange}
+          />
+          <span className="truncate">{fileName || "Choose CSV or XLSX file"}</span>
+        </label>
+        <button
+          type="submit"
+          disabled={loading || !fileName}
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-[#5865f2] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#5865f2]"
+        >
+          {loading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Upload className="h-4 w-4" />
+          )}
+          Import
+        </button>
+      </form>
+
+      {error && (
+        <p
+          role="alert"
+          className="mt-3 rounded-md border border-[#ed4245]/30 bg-[#ed4245]/10 px-3 py-2 text-xs text-[#f23f42]"
+        >
+          {error}
+        </p>
+      )}
+
+      {result && (
+        <div className="mt-3 rounded-lg border border-[#3f4147]/80 bg-[#2b2d31] p-3">
+          <div className="grid gap-2 text-sm sm:grid-cols-3">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-[#949ba4]">
+                Imported
+              </p>
+              <p className="text-lg font-bold text-[#57f287]">
+                {result.importedCount}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-[#949ba4]">
+                Skipped
+              </p>
+              <p className="text-lg font-bold text-[#faa61a]">
+                {result.skippedCount}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-[#949ba4]">
+                Notes
+              </p>
+              <p className="text-lg font-bold text-[#f2f3f5]">
+                {result.errors?.length ?? 0}
+              </p>
+            </div>
+          </div>
+
+          {credentials.length > 0 && (
+            <>
+              <div className="mt-3 overflow-hidden rounded-md border border-[#1e1f22]/70">
+                <div className="hidden grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,0.9fr)] gap-2 border-b border-[#1e1f22]/70 bg-[#1e1f22] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#949ba4] sm:grid">
+                  <span>Name</span>
+                  <span>Roll no</span>
+                  <span>Password</span>
+                  <span>Group</span>
+                </div>
+                <div className="max-h-52 overflow-y-auto">
+                  {credentials.map((credential) => (
+                    <div
+                      key={credential.rollNo}
+                      className="grid gap-1 border-b border-[#1e1f22]/70 px-3 py-2 text-xs last:border-b-0 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,0.9fr)] sm:gap-2"
+                    >
+                      <p className="truncate text-[#dbdee1]">
+                        <span className="text-[#949ba4] sm:hidden">Name: </span>
+                        {credential.name}
+                      </p>
+                      <p className="truncate font-mono text-[#dbdee1]">
+                        <span className="font-sans text-[#949ba4] sm:hidden">
+                          Roll no:{" "}
+                        </span>
+                        {credential.rollNo}
+                      </p>
+                      <p className="truncate font-mono text-[#b8c0ff]">
+                        <span className="font-sans text-[#949ba4] sm:hidden">
+                          Password:{" "}
+                        </span>
+                        {credential.temporaryPassword}
+                      </p>
+                      <p className="truncate text-[#dbdee1]">
+                        <span className="text-[#949ba4] sm:hidden">Group: </span>
+                        {credential.group?.name ?? "Unassigned"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <textarea
+                readOnly
+                value={credentialText}
+                rows={Math.min(credentials.length, 5)}
+                onFocus={(e) => e.target.select()}
+                className="mt-2 max-h-32 min-h-16 w-full resize-y rounded-md border border-[#1e1f22]/70 bg-[#1e1f22] px-3 py-2 font-mono text-xs text-[#dbdee1] outline-none focus:border-[#5865f2]/60 focus:ring-2 focus:ring-[#5865f2]/20"
+                aria-label="Copy imported student credentials"
+              />
+            </>
+          )}
+
+          {result.errors?.length > 0 && (
+            <ul className="mt-3 max-h-32 space-y-1 overflow-y-auto text-xs text-[#f0b86a]">
+              {result.errors.slice(0, 8).map((item, index) => (
+                <li key={`${item.row ?? "row"}-${index}`}>
+                  Row {item.row ?? "-"}: {item.message}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+
 function StudentAttendanceCard({ attendance, loading, error }) {
   const percentage = attendance?.attendancePercentage ?? 0;
 
@@ -662,6 +832,18 @@ function ChatPage() {
   const [attendanceValues, setAttendanceValues] = useState({});
   const [attendanceUpdateUserId, setAttendanceUpdateUserId] = useState(null);
   const [attendanceUpdateError, setAttendanceUpdateError] = useState("");
+  const [studentImportFile, setStudentImportFile] = useState(null);
+  const [studentImportLoading, setStudentImportLoading] = useState(false);
+  const [studentImportResult, setStudentImportResult] = useState(null);
+  const [studentImportError, setStudentImportError] = useState("");
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [passwordChangeLoading, setPasswordChangeLoading] = useState(false);
+  const [passwordChangeError, setPasswordChangeError] = useState("");
+  const [passwordChangeSuccess, setPasswordChangeSuccess] = useState("");
   const [announcementTitle, setAnnouncementTitle] = useState("");
   const [announcementContent, setAnnouncementContent] = useState("");
   const [announcementCreateLoading, setAnnouncementCreateLoading] =
@@ -694,6 +876,7 @@ function ChatPage() {
 
   const canCreateAnnouncements = canManageAnnouncements(user?.role);
   const canEditAttendance = canManageAttendance(user?.role);
+  const canImportStudents = canManageAttendance(user?.role);
 
   const clearTypingExpiry = useCallback((key) => {
     const timer = typingExpiryTimersRef.current.get(key);
@@ -1194,6 +1377,92 @@ function ChatPage() {
     }
   }
 
+  function handleStudentImportFileChange(e) {
+    const file = e.target.files?.[0] ?? null;
+    setStudentImportFile(file);
+    setStudentImportResult(null);
+    setStudentImportError("");
+  }
+
+  async function handleStudentImportSubmit(e) {
+    e.preventDefault();
+    if (!studentImportFile || !canImportStudents) return;
+
+    setStudentImportLoading(true);
+    setStudentImportError("");
+    setStudentImportResult(null);
+
+    try {
+      const result = await importStudents(studentImportFile);
+      setStudentImportResult(result);
+      setStudentImportFile(null);
+    } catch (err) {
+      setStudentImportError(
+        err.response?.data?.message ?? "Failed to import students."
+      );
+    } finally {
+      setStudentImportLoading(false);
+    }
+  }
+
+  function handlePasswordFormChange(e) {
+    const { name, value } = e.target;
+    setPasswordForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+    setPasswordChangeError("");
+    setPasswordChangeSuccess("");
+  }
+
+  async function handlePasswordChangeSubmit(e) {
+    e.preventDefault();
+
+    const currentPassword = passwordForm.currentPassword.trim();
+    const newPassword = passwordForm.newPassword;
+    const confirmPassword = passwordForm.confirmPassword;
+
+    setPasswordChangeError("");
+    setPasswordChangeSuccess("");
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setPasswordChangeError("All password fields are required.");
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setPasswordChangeError("New password must be at least 6 characters.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setPasswordChangeError("New password and confirmation do not match.");
+      return;
+    }
+
+    setPasswordChangeLoading(true);
+    try {
+      const response = await changePassword({
+        currentPassword,
+        newPassword,
+      });
+      setPasswordForm({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+      });
+      setPasswordChangeSuccess(
+        response.message ?? "Password updated successfully."
+      );
+    } catch (err) {
+      setPasswordChangeError(
+        err.response?.data?.message ?? "Failed to update password."
+      );
+    } finally {
+      setPasswordChangeLoading(false);
+    }
+  }
+
   function handleInputKeyDown(e) {
     if (e.key !== "Enter" || e.shiftKey) return;
     e.preventDefault();
@@ -1262,6 +1531,11 @@ function ChatPage() {
     setAnnouncementCreateError("");
     setFileUploadError("");
     setAttendanceUpdateError("");
+    setStudentImportFile(null);
+    setStudentImportResult(null);
+    setStudentImportError("");
+    setPasswordChangeError("");
+    setPasswordChangeSuccess("");
     setEmojiPickerOpen(false);
     setSidebarOpen(false);
   }
@@ -1582,6 +1856,24 @@ function ChatPage() {
           <div className="w-full space-y-0.5 py-3 sm:py-4 md:mx-auto md:max-w-4xl">
             {!groupsLoading && selectedGroup && (
               <>
+                <SettingsPanel
+                  values={passwordForm}
+                  loading={passwordChangeLoading}
+                  error={passwordChangeError}
+                  success={passwordChangeSuccess}
+                  onChange={handlePasswordFormChange}
+                  onSubmit={handlePasswordChangeSubmit}
+                />
+                {canImportStudents && (
+                  <StudentImportPanel
+                    fileName={studentImportFile?.name ?? ""}
+                    loading={studentImportLoading}
+                    result={studentImportResult}
+                    error={studentImportError}
+                    onFileChange={handleStudentImportFileChange}
+                    onSubmit={handleStudentImportSubmit}
+                  />
+                )}
                 {user?.role === "STUDENT" && (
                   <StudentAttendanceCard
                     attendance={myAttendance}

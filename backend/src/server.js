@@ -12,6 +12,7 @@ const messageRoutes = require("./routes/message.routes");
 const announcementRoutes = require("./routes/announcement.routes");
 const fileRoutes = require("./routes/file.routes");
 const attendanceRoutes = require("./routes/attendance.routes");
+const adminRoutes = require("./routes/admin.routes");
 const authMiddleware = require("./middleware/auth.middleware");
 const setupChatSocket = require("./sockets/chat.socket");
 
@@ -31,6 +32,7 @@ app.use("/api/messages", messageRoutes);
 app.use("/api/announcements", announcementRoutes);
 app.use("/api/files", fileRoutes);
 app.use("/api/attendance", attendanceRoutes);
+app.use("/api/admin", adminRoutes);
 
 app.get("/api/protected", authMiddleware, (req, res) => {
   res.json({
