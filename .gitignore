@@ -1,6 +1,10 @@
 node_modules
 .env
 uploads
+!backend/uploads/
+backend/uploads/*
+!backend/uploads/.gitignore
+!backend/uploads/.gitkeep
 dist
 build
 .DS_Store

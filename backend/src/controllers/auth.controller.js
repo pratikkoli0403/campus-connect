@@ -54,6 +54,7 @@ const registerUser = async (req, res) => {
       role: true,
       branch: true,
       year: true,
+      attendancePercentage: true,
       createdAt: true,
     };
 
@@ -158,6 +159,7 @@ const loginUser = async (req, res) => {
         name: user.name,
         rollNo: user.rollNo,
         role: user.role,
+        attendancePercentage: user.attendancePercentage,
       },
     });
   } catch (error) {

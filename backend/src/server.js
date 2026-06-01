@@ -1,6 +1,7 @@
 const http = require("http");
 const express = require("express");
 const cors = require("cors");
+const path = require("path");
 const { Server } = require("socket.io");
 require("dotenv").config();
 
@@ -9,6 +10,8 @@ const authRoutes = require("./routes/auth.routes");
 const groupRoutes = require("./routes/group.routes");
 const messageRoutes = require("./routes/message.routes");
 const announcementRoutes = require("./routes/announcement.routes");
+const fileRoutes = require("./routes/file.routes");
+const attendanceRoutes = require("./routes/attendance.routes");
 const authMiddleware = require("./middleware/auth.middleware");
 const setupChatSocket = require("./sockets/chat.socket");
 
@@ -16,6 +19,7 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
 
 app.get("/", (req, res) => {
   res.send("new backend active");
@@ -25,6 +29,8 @@ app.use("/api/auth", authRoutes);
 app.use("/api/groups", groupRoutes);
 app.use("/api/messages", messageRoutes);
 app.use("/api/announcements", announcementRoutes);
+app.use("/api/files", fileRoutes);
+app.use("/api/attendance", attendanceRoutes);
 
 app.get("/api/protected", authMiddleware, (req, res) => {
   res.json({

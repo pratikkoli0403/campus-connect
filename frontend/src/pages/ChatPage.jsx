@@ -2,6 +2,9 @@ import socket from "../sockets/socket";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
+  Download,
+  FileText,
+  Gauge,
   Hash,
   Loader2,
   Menu,
@@ -9,6 +12,7 @@ import {
   MoreVertical,
   Paperclip,
   Pin,
+  Save,
   Search,
   Send,
   Smile,
@@ -22,6 +26,15 @@ import {
   createAnnouncement,
   getAnnouncements,
 } from "../services/announcementService.js";
+import {
+  getFiles,
+  resolveFileUrl,
+  uploadFile,
+} from "../services/fileService.js";
+import {
+  getMyAttendance,
+  updateAttendance,
+} from "../services/attendanceService.js";
 
 function getStoredUser() {
   try {
@@ -48,8 +61,24 @@ function formatAnnouncementTime(iso) {
   });
 }
 
+function formatFileTime(iso) {
+  return new Date(iso).toLocaleDateString([], {
+    month: "short",
+    day: "numeric",
+  });
+}
+
 function canManageAnnouncements(role) {
   return ["ADMIN", "FACULTY", "TEACHER"].includes(role);
+}
+
+function canManageAttendance(role) {
+  return ["ADMIN", "TEACHER"].includes(role);
+}
+
+function formatAttendance(value) {
+  const percentage = Number(value ?? 0);
+  return `${Number.isInteger(percentage) ? percentage : percentage.toFixed(2)}%`;
 }
 
 function getInitials(name) {
@@ -77,12 +106,68 @@ function avatarColor(id) {
 const TYPING_THROTTLE_MS = 2000;
 const TYPING_IDLE_MS = 2000;
 const TYPING_STALE_MS = 5000;
+const CHAT_EMOJIS = [
+  "😀",
+  "😄",
+  "😂",
+  "😊",
+  "😍",
+  "😎",
+  "🥳",
+  "🤔",
+  "😅",
+  "😭",
+  "😤",
+  "🙌",
+  "👏",
+  "👍",
+  "👎",
+  "🙏",
+  "💪",
+  "🔥",
+  "✨",
+  "🎉",
+  "✅",
+  "❌",
+  "📌",
+  "📚",
+  "📝",
+  "💻",
+  "⏰",
+  "🚀",
+  "❤️",
+  "💯",
+];
 
 function formatTypingLabel(names) {
   if (names.length === 0) return "";
   if (names.length === 1) return `${names[0]} is typing…`;
   if (names.length === 2) return `${names[0]} and ${names[1]} are typing…`;
   return `${names[0]}, ${names[1]}, and ${names.length - 2} others are typing…`;
+}
+
+function EmojiPicker({ onSelect }) {
+  return (
+    <div
+      className="absolute bottom-full right-11 z-30 mb-2 w-[min(18rem,calc(100vw-1.5rem))] rounded-lg border border-[#1e1f22]/80 bg-[#2b2d31] p-2 shadow-2xl ring-1 ring-black/20 sm:right-12"
+      role="dialog"
+      aria-label="Emoji picker"
+    >
+      <div className="grid grid-cols-6 gap-1">
+        {CHAT_EMOJIS.map((emoji) => (
+          <button
+            key={emoji}
+            type="button"
+            className="flex aspect-square min-h-10 items-center justify-center rounded-md text-xl transition-colors hover:bg-[#404249] focus:bg-[#404249] focus:outline-none focus:ring-2 focus:ring-[#5865f2]/50"
+            onClick={() => onSelect(emoji)}
+            aria-label={`Insert ${emoji}`}
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function PresenceDot({ online, size = "sm", className = "" }) {
@@ -248,6 +333,203 @@ function AnnouncementCard({ announcement }) {
   );
 }
 
+function FileCard({ file }) {
+  const uploader = file.uploader ?? {
+    id: file.uploadedBy,
+    name: "Unknown user",
+  };
+
+  return (
+    <a
+      href={resolveFileUrl(file.fileUrl)}
+      target="_blank"
+      rel="noreferrer"
+      download
+      className="group flex min-w-0 items-center gap-3 rounded-lg border border-[#3f4147]/80 bg-[#2b2d31] p-3 text-left transition-colors hover:border-[#5865f2]/60 hover:bg-[#32343a]"
+    >
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#5865f2]/15 text-[#b8c0ff] ring-1 ring-[#5865f2]/25">
+        <FileText className="h-5 w-5" aria-hidden />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold text-[#f2f3f5]">
+          {file.fileName}
+        </p>
+        <p className="truncate text-xs text-[#949ba4]">
+          {uploader.name} · {formatFileTime(file.createdAt)}
+        </p>
+      </div>
+      <Download
+        className="h-4 w-4 shrink-0 text-[#949ba4] transition-colors group-hover:text-[#f2f3f5]"
+        aria-hidden
+      />
+    </a>
+  );
+}
+
+function FilesSection({ files, loading, error }) {
+  return (
+    <section className="mx-2 mb-4 rounded-lg border border-[#1e1f22]/70 bg-[#313338] p-3 shadow-sm sm:mx-4 sm:p-4">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <Paperclip className="h-5 w-5 shrink-0 text-[#b8c0ff]" />
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-semibold text-[#f2f3f5]">
+              Shared files
+            </h2>
+            <p className="truncate text-xs text-[#949ba4]">
+              {files.length} uploaded
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 rounded-lg bg-[#2b2d31] px-3 py-3 text-sm text-[#949ba4]">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          Loading files...
+        </div>
+      ) : error ? (
+        <p
+          role="alert"
+          className="rounded-lg border border-[#ed4245]/30 bg-[#ed4245]/10 px-3 py-3 text-sm text-[#f23f42]"
+        >
+          {error}
+        </p>
+      ) : files.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-[#3f4147] bg-[#2b2d31]/70 px-3 py-4 text-sm text-[#949ba4]">
+          No files shared yet.
+        </div>
+      ) : (
+        <div className="grid gap-2 sm:grid-cols-2">
+          {files.map((file) => (
+            <FileCard key={file.id} file={file} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function StudentAttendanceCard({ attendance, loading, error }) {
+  const percentage = attendance?.attendancePercentage ?? 0;
+
+  return (
+    <section className="mx-2 mb-4 rounded-lg border border-[#1e1f22]/70 bg-[#313338] p-3 shadow-sm sm:mx-4 sm:p-4">
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-[#23a559]/15 text-[#57f287] ring-1 ring-[#23a559]/25">
+          <Gauge className="h-5 w-5" aria-hidden />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#949ba4]">
+            Attendance
+          </p>
+          {loading ? (
+            <div className="mt-2 h-7 w-24 animate-pulse rounded bg-[#404249]" />
+          ) : error ? (
+            <p className="mt-1 text-sm text-[#f23f42]">{error}</p>
+          ) : (
+            <p className="mt-0.5 text-3xl font-bold leading-none text-[#f2f3f5]">
+              {formatAttendance(percentage)}
+            </p>
+          )}
+        </div>
+      </div>
+      {!loading && !error && (
+        <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#1e1f22]">
+          <div
+            className="h-full rounded-full bg-[#23a559]"
+            style={{ width: `${Math.min(Math.max(Number(percentage), 0), 100)}%` }}
+          />
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AttendanceUpdatePanel({
+  members,
+  values,
+  loadingUserId,
+  error,
+  onValueChange,
+  onSubmit,
+}) {
+  return (
+    <section className="mx-2 mb-4 rounded-lg border border-[#1e1f22]/70 bg-[#313338] p-3 shadow-sm sm:mx-4 sm:p-4">
+      <div className="mb-3 flex min-w-0 items-center gap-2">
+        <Gauge className="h-5 w-5 shrink-0 text-[#57f287]" />
+        <div className="min-w-0">
+          <h2 className="truncate text-sm font-semibold text-[#f2f3f5]">
+            Attendance updates
+          </h2>
+          <p className="truncate text-xs text-[#949ba4]">
+            Set a student percentage from 0 to 100
+          </p>
+        </div>
+      </div>
+
+      {error && (
+        <p
+          role="alert"
+          className="mb-3 rounded-md border border-[#ed4245]/30 bg-[#ed4245]/10 px-3 py-2 text-xs text-[#f23f42]"
+        >
+          {error}
+        </p>
+      )}
+
+      {members.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-[#3f4147] bg-[#2b2d31]/70 px-3 py-4 text-sm text-[#949ba4]">
+          No students available in this group.
+        </div>
+      ) : (
+        <div className="grid gap-2">
+          {members.map((member) => {
+            const saving = loadingUserId === member.id;
+            return (
+              <form
+                key={member.id}
+                onSubmit={(e) => onSubmit(e, member.id)}
+                className="grid gap-2 rounded-lg border border-[#3f4147]/80 bg-[#2b2d31] p-3 sm:grid-cols-[minmax(0,1fr)_9rem_auto] sm:items-center"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-[#f2f3f5]">
+                    {member.name}
+                  </p>
+                  <p className="truncate text-xs text-[#949ba4]">
+                    {member.rollNo ?? member.role} · Current{" "}
+                    {formatAttendance(member.attendancePercentage)}
+                  </p>
+                </div>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={values[member.id] ?? ""}
+                  onChange={(e) => onValueChange(member.id, e.target.value)}
+                  className="h-10 w-full rounded-md border border-transparent bg-[#1e1f22] px-3 text-sm text-[#f2f3f5] placeholder:text-[#6d6f78] outline-none transition-all focus:border-[#57f287]/60 focus:ring-2 focus:ring-[#57f287]/20"
+                />
+                <button
+                  type="submit"
+                  disabled={saving || values[member.id] === ""}
+                  className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#23a559] px-3 text-sm font-semibold text-white transition-colors hover:bg-[#1f8f4d] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#23a559]"
+                >
+                  {saving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  Save
+                </button>
+              </form>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function AnnouncementsSection({
   announcements,
   loading,
@@ -369,18 +651,33 @@ function ChatPage() {
   const [announcements, setAnnouncements] = useState([]);
   const [announcementsLoading, setAnnouncementsLoading] = useState(false);
   const [announcementsError, setAnnouncementsError] = useState("");
+  const [files, setFiles] = useState([]);
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [filesError, setFilesError] = useState("");
+  const [fileUploadLoading, setFileUploadLoading] = useState(false);
+  const [fileUploadError, setFileUploadError] = useState("");
+  const [myAttendance, setMyAttendance] = useState(null);
+  const [attendanceLoading, setAttendanceLoading] = useState(false);
+  const [attendanceError, setAttendanceError] = useState("");
+  const [attendanceValues, setAttendanceValues] = useState({});
+  const [attendanceUpdateUserId, setAttendanceUpdateUserId] = useState(null);
+  const [attendanceUpdateError, setAttendanceUpdateError] = useState("");
   const [announcementTitle, setAnnouncementTitle] = useState("");
   const [announcementContent, setAnnouncementContent] = useState("");
   const [announcementCreateLoading, setAnnouncementCreateLoading] =
     useState(false);
   const [announcementCreateError, setAnnouncementCreateError] = useState("");
   const [groupSearch, setGroupSearch] = useState("");
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [onlineUserIds, setOnlineUserIds] = useState(() => new Set());
   const [membersOpen, setMembersOpen] = useState(false);
   const [groupMembers, setGroupMembers] = useState([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [typingUsers, setTypingUsers] = useState(() => new Map());
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const messageInputRef = useRef(null);
+  const emojiPickerRef = useRef(null);
   const prevMessageCountRef = useRef(0);
   const lastTypingEmitRef = useRef(0);
   const stopTypingTimerRef = useRef(null);
@@ -396,6 +693,7 @@ function ChatPage() {
   }, [typingUsers]);
 
   const canCreateAnnouncements = canManageAnnouncements(user?.role);
+  const canEditAttendance = canManageAttendance(user?.role);
 
   const clearTypingExpiry = useCallback((key) => {
     const timer = typingExpiryTimersRef.current.get(key);
@@ -448,6 +746,20 @@ function ChatPage() {
     );
   }
 
+  function updateDraftMessage(value) {
+    setNewMessage(value);
+
+    if (selectedGroupId == null || !user?.name) return;
+
+    if (!value.trim()) {
+      emitStopTyping();
+      return;
+    }
+
+    emitTyping();
+    scheduleStopTyping();
+  }
+
   const addTypingUser = useCallback((key, userName) => {
     setTypingUsers((prev) => {
       const next = new Map(prev);
@@ -477,6 +789,37 @@ function ChatPage() {
       return next;
     });
   }, [clearTypingExpiry]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMyAttendance() {
+      if (!user?.id) {
+        setMyAttendance(null);
+        return;
+      }
+
+      setAttendanceLoading(true);
+      setAttendanceError("");
+      try {
+        const data = await getMyAttendance();
+        if (!cancelled) setMyAttendance(data);
+      } catch (err) {
+        if (!cancelled) {
+          setAttendanceError(
+            err.response?.data?.message ?? "Failed to load attendance."
+          );
+        }
+      } finally {
+        if (!cancelled) setAttendanceLoading(false);
+      }
+    }
+
+    loadMyAttendance();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -594,6 +937,38 @@ function ChatPage() {
   }, [selectedGroupId]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadFiles() {
+      if (selectedGroupId == null) {
+        setFiles([]);
+        setFilesError("");
+        return;
+      }
+
+      setFilesLoading(true);
+      setFilesError("");
+      setFileUploadError("");
+      try {
+        const data = await getFiles(selectedGroupId);
+        if (!cancelled) setFiles(data ?? []);
+      } catch (err) {
+        if (!cancelled) {
+          setFiles([]);
+          setFilesError(err.response?.data?.message ?? "Failed to load files.");
+        }
+      } finally {
+        if (!cancelled) setFilesLoading(false);
+      }
+    }
+
+    loadFiles();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedGroupId]);
+
+  useEffect(() => {
     if (selectedGroupId == null) return;
 
     socket.emit("joinGroup", { groupId: selectedGroupId });
@@ -668,9 +1043,25 @@ function ChatPage() {
       setMembersLoading(true);
       try {
         const data = await getGroupMembers(selectedGroupId);
-        if (!cancelled) setGroupMembers(data.data ?? []);
+        if (!cancelled) {
+          const members = data.data ?? [];
+          setGroupMembers(members);
+          setAttendanceValues(
+            Object.fromEntries(
+              members
+                .filter((member) => member.role === "STUDENT")
+                .map((member) => [
+                  member.id,
+                  String(member.attendancePercentage ?? 0),
+                ])
+            )
+          );
+        }
       } catch {
-        if (!cancelled) setGroupMembers([]);
+        if (!cancelled) {
+          setGroupMembers([]);
+          setAttendanceValues({});
+        }
       } finally {
         if (!cancelled) setMembersLoading(false);
       }
@@ -725,11 +1116,82 @@ function ChatPage() {
 
     emitStopTyping();
     setNewMessage("");
+    setEmojiPickerOpen(false);
   }
 
   function handleSend(e) {
     e.preventDefault();
     sendMessage();
+  }
+
+  function openFilePicker() {
+    if (!selectedGroup || fileUploadLoading) return;
+    fileInputRef.current?.click();
+  }
+
+  async function handleFileChange(e) {
+    const selectedFile = e.target.files?.[0];
+    e.target.value = "";
+
+    if (!selectedFile || !selectedGroup) return;
+
+    setFileUploadLoading(true);
+    setFileUploadError("");
+
+    try {
+      const uploaded = await uploadFile({
+        groupId: selectedGroup.id,
+        file: selectedFile,
+      });
+      setFiles((prev) => [uploaded, ...prev]);
+    } catch (err) {
+      setFileUploadError(
+        err.response?.data?.message ?? "Failed to upload file."
+      );
+    } finally {
+      setFileUploadLoading(false);
+    }
+  }
+
+  function handleAttendanceValueChange(userId, value) {
+    setAttendanceValues((prev) => ({
+      ...prev,
+      [userId]: value,
+    }));
+  }
+
+  async function handleAttendanceSubmit(e, userId) {
+    e.preventDefault();
+
+    const rawValue = attendanceValues[userId];
+    if (rawValue === "" || rawValue == null) return;
+
+    setAttendanceUpdateUserId(userId);
+    setAttendanceUpdateError("");
+
+    try {
+      const updated = await updateAttendance(userId, rawValue);
+      setGroupMembers((prev) =>
+        prev.map((member) =>
+          member.id === updated.id
+            ? {
+                ...member,
+                attendancePercentage: updated.attendancePercentage,
+              }
+            : member
+        )
+      );
+
+      if (Number(updated.id) === Number(user?.id)) {
+        setMyAttendance(updated);
+      }
+    } catch (err) {
+      setAttendanceUpdateError(
+        err.response?.data?.message ?? "Failed to update attendance."
+      );
+    } finally {
+      setAttendanceUpdateUserId(null);
+    }
   }
 
   function handleInputKeyDown(e) {
@@ -739,18 +1201,29 @@ function ChatPage() {
   }
 
   function handleMessageChange(e) {
-    const value = e.target.value;
-    setNewMessage(value);
+    updateDraftMessage(e.target.value);
+  }
 
-    if (!selectedGroup || !user?.name) return;
+  function toggleEmojiPicker() {
+    if (selectedGroupId == null || groupsLoading) return;
+    setEmojiPickerOpen((open) => !open);
+  }
 
-    if (!value.trim()) {
-      emitStopTyping();
-      return;
-    }
+  function insertEmoji(emoji) {
+    const input = messageInputRef.current;
+    const start = input?.selectionStart ?? newMessage.length;
+    const end = input?.selectionEnd ?? newMessage.length;
+    const nextMessage =
+      newMessage.slice(0, start) + emoji + newMessage.slice(end);
+    const nextCursor = start + emoji.length;
 
-    emitTyping();
-    scheduleStopTyping();
+    updateDraftMessage(nextMessage);
+    setEmojiPickerOpen(false);
+
+    requestAnimationFrame(() => {
+      messageInputRef.current?.focus();
+      messageInputRef.current?.setSelectionRange(nextCursor, nextCursor);
+    });
   }
 
   async function handleCreateAnnouncement(e) {
@@ -787,6 +1260,9 @@ function ChatPage() {
     setAnnouncementTitle("");
     setAnnouncementContent("");
     setAnnouncementCreateError("");
+    setFileUploadError("");
+    setAttendanceUpdateError("");
+    setEmojiPickerOpen(false);
     setSidebarOpen(false);
   }
 
@@ -821,6 +1297,26 @@ function ChatPage() {
       document.body.style.overflow = prevOverflow;
     };
   }, [sidebarOpen]);
+
+  useEffect(() => {
+    if (!emojiPickerOpen) return;
+
+    const onPointerDown = (e) => {
+      if (emojiPickerRef.current?.contains(e.target)) return;
+      setEmojiPickerOpen(false);
+    };
+
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") setEmojiPickerOpen(false);
+    };
+
+    window.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [emojiPickerOpen]);
 
   return (
     <div className="flex h-dvh min-h-0 overflow-hidden bg-[#313338] text-[#f2f3f5]">
@@ -1085,6 +1581,29 @@ function ChatPage() {
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain scroll-smooth">
           <div className="w-full space-y-0.5 py-3 sm:py-4 md:mx-auto md:max-w-4xl">
             {!groupsLoading && selectedGroup && (
+              <>
+                {user?.role === "STUDENT" && (
+                  <StudentAttendanceCard
+                    attendance={myAttendance}
+                    loading={attendanceLoading}
+                    error={attendanceError}
+                  />
+                )}
+                {canEditAttendance && (
+                  <AttendanceUpdatePanel
+                    members={groupMembers.filter(
+                      (member) => member.role === "STUDENT"
+                    )}
+                    values={attendanceValues}
+                    loadingUserId={attendanceUpdateUserId}
+                    error={attendanceUpdateError}
+                    onValueChange={handleAttendanceValueChange}
+                    onSubmit={handleAttendanceSubmit}
+                  />
+                )}
+              </>
+            )}
+            {!groupsLoading && selectedGroup && (
               <AnnouncementsSection
                 announcements={announcements}
                 loading={announcementsLoading}
@@ -1097,6 +1616,13 @@ function ChatPage() {
                 onTitleChange={setAnnouncementTitle}
                 onContentChange={setAnnouncementContent}
                 onSubmit={handleCreateAnnouncement}
+              />
+            )}
+            {!groupsLoading && selectedGroup && (
+              <FilesSection
+                files={files}
+                loading={filesLoading}
+                error={filesError}
               />
             )}
             {groupsLoading ? (
@@ -1167,19 +1693,42 @@ function ChatPage() {
               {typingLabel}
             </p>
           )}
+          {fileUploadError && (
+            <p
+              className="mb-1.5 rounded-md border border-[#ed4245]/30 bg-[#ed4245]/10 px-3 py-2 text-xs text-[#f23f42] md:mx-auto md:max-w-4xl"
+              role="alert"
+            >
+              {fileUploadError}
+            </p>
+          )}
           <form
+            ref={emojiPickerRef}
             onSubmit={handleSend}
-            className="flex w-full items-end gap-1.5 rounded-lg bg-[#383a40] px-2 py-1.5 shadow-inner ring-1 ring-[#1e1f22]/40 transition-shadow focus-within:ring-[#5865f2]/40 sm:gap-2 sm:px-3 sm:py-2 md:mx-auto md:max-w-4xl"
+            className="relative flex w-full items-end gap-1.5 rounded-lg bg-[#383a40] px-2 py-1.5 shadow-inner ring-1 ring-[#1e1f22]/40 transition-shadow focus-within:ring-[#5865f2]/40 sm:gap-2 sm:px-3 sm:py-2 md:mx-auto md:max-w-4xl"
           >
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,application/pdf,image/png,image/jpeg,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              onChange={handleFileChange}
+            />
             <button
               type="button"
               aria-label="Attach file"
-              className="mb-0.5 hidden shrink-0 rounded-md p-2 text-[#b5bac1] transition-colors hover:text-[#f2f3f5] sm:block"
+              disabled={!selectedGroup || groupsLoading || fileUploadLoading}
+              onClick={openFilePicker}
+              className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-[#b5bac1] transition-colors hover:text-[#f2f3f5] disabled:cursor-not-allowed disabled:opacity-40 sm:h-auto sm:w-auto sm:p-2"
             >
-              <Paperclip className="h-5 w-5" />
+              {fileUploadLoading ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Paperclip className="h-5 w-5" />
+              )}
             </button>
 
             <input
+              ref={messageInputRef}
               type="text"
               placeholder={
                 selectedGroup
@@ -1194,10 +1743,18 @@ function ChatPage() {
               className="min-h-[40px] min-w-0 flex-1 bg-transparent py-2 text-sm text-[#f2f3f5] placeholder:text-[#6d6f78] outline-none disabled:cursor-not-allowed disabled:opacity-50 sm:text-[15px]"
             />
 
+            {emojiPickerOpen && <EmojiPicker onSelect={insertEmoji} />}
+
             <button
               type="button"
               aria-label="Emoji"
-              className="mb-0.5 hidden shrink-0 rounded-md p-2 text-[#b5bac1] transition-colors hover:text-[#f2f3f5] md:block"
+              aria-expanded={emojiPickerOpen}
+              aria-haspopup="dialog"
+              disabled={!selectedGroup || groupsLoading}
+              onClick={toggleEmojiPicker}
+              className={`mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-[#b5bac1] transition-colors hover:text-[#f2f3f5] disabled:cursor-not-allowed disabled:opacity-40 sm:h-auto sm:w-auto sm:p-2 ${
+                emojiPickerOpen ? "bg-[#404249] text-[#f2f3f5]" : ""
+              }`}
             >
               <Smile className="h-5 w-5" />
             </button>

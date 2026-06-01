@@ -179,6 +179,7 @@ const joinGroup = async (req, res) => {
 const getGroupMembers = async (req, res) => {
   try {
     const groupId = Number(req.params.groupId);
+    const canViewAttendance = ["ADMIN", "TEACHER"].includes(req.user?.role);
 
     if (!Number.isInteger(groupId) || groupId < 1) {
       return res.status(400).json({
@@ -207,6 +208,7 @@ const getGroupMembers = async (req, res) => {
             name: true,
             rollNo: true,
             role: true,
+            ...(canViewAttendance && { attendancePercentage: true }),
           },
         },
       },

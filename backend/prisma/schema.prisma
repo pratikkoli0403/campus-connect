@@ -16,10 +16,12 @@ model User {
   role     Role
   branch   String?
   year     Int?
+  attendancePercentage Float @default(0)
 
   groups        GroupMember[]
   messages      Message[]
   announcements Announcement[]
+  uploadedFiles File[]
 
   sentPrivateMessages     PrivateMessage[] @relation("Sender")
   receivedPrivateMessages PrivateMessage[] @relation("Receiver")
@@ -39,6 +41,7 @@ model Group {
   members       GroupMember[]
   messages      Message[]
   announcements Announcement[]
+  files         File[]
 
   createdAt DateTime @default(now())
 }
@@ -76,6 +79,21 @@ model Announcement {
 
   group   Group @relation(fields: [groupId], references: [id])
   creator User  @relation(fields: [createdBy], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+model File {
+  id       Int    @id @default(autoincrement())
+  fileName String
+  fileUrl  String
+  mimeType String
+
+  uploadedBy Int
+  groupId    Int
+
+  uploader User  @relation(fields: [uploadedBy], references: [id])
+  group    Group @relation(fields: [groupId], references: [id])
 
   createdAt DateTime @default(now())
 }
