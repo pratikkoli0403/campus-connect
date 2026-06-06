@@ -1,3 +1,6 @@
+import AttendancePanel from "../components/AttendancePanel";
+import FilesPanel from "../components/FilesPanel";
+import AnnouncementPanel from "../components/AnnouncementPanel";
 import SettingsPanel from "../components/SettingsPanel";
 import socket from "../sockets/socket";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -301,42 +304,6 @@ function MessageRow({ message, showHeader, isOwn, isSenderOnline }) {
   );
 }
 
-function AnnouncementCard({ announcement }) {
-  const creator = announcement.creator ?? {
-    id: announcement.createdBy,
-    name: "CampusConnect",
-    role: "ADMIN",
-  };
-
-  return (
-    <article className="rounded-lg border border-[#3f4147]/80 bg-[#2b2d31] p-3 shadow-sm sm:p-4">
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#faa61a]/15 text-[#faa61a] ring-1 ring-[#faa61a]/25">
-          <Megaphone className="h-4 w-4" aria-hidden />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-            <h3 className="break-words text-sm font-semibold text-[#f2f3f5] sm:text-[15px]">
-              {announcement.title}
-            </h3>
-            <time
-              dateTime={announcement.createdAt}
-              className="shrink-0 text-xs text-[#949ba4]"
-            >
-              {formatAnnouncementTime(announcement.createdAt)}
-            </time>
-          </div>
-          <p className="mt-1 text-xs font-medium text-[#b5bac1]">
-            {creator.name} · {creator.role}
-          </p>
-          <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed text-[#dbdee1]">
-            {announcement.content}
-          </p>
-        </div>
-      </div>
-    </article>
-  );
-}
 
 function FileCard({ file }) {
   const uploader = file.uploader ?? {
@@ -1875,7 +1842,7 @@ function ChatPage() {
                   />
                 )}
                 {user?.role === "STUDENT" && (
-                  <StudentAttendanceCard
+                  <AttendancePanel
                     attendance={myAttendance}
                     loading={attendanceLoading}
                     error={attendanceError}
@@ -1896,7 +1863,7 @@ function ChatPage() {
               </>
             )}
             {!groupsLoading && selectedGroup && (
-              <AnnouncementsSection
+              <AnnouncementPanel
                 announcements={announcements}
                 loading={announcementsLoading}
                 error={announcementsError}
@@ -1911,7 +1878,7 @@ function ChatPage() {
               />
             )}
             {!groupsLoading && selectedGroup && (
-              <FilesSection
+              <FilesPanel
                 files={files}
                 loading={filesLoading}
                 error={filesError}

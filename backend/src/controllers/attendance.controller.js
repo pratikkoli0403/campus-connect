@@ -62,7 +62,8 @@ const getMyAttendance = async (req, res) => {
 };
 
 const updateAttendance = async (req, res) => {
-  try {
+  try { console.log("REQ USER:", req.user);
+    console.log("ROLE:", req.user?.role);
     if (!canUpdateAttendance(req.user?.role)) {
       return res.status(403).json({
         success: false,
