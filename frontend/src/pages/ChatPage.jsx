@@ -776,6 +776,7 @@ function AnnouncementsSection({
 }
 
 function ChatPage() {
+  const [activePanel, setActivePanel] = useState("chat");
   const { user } = useAuth();
   const [groups, setGroups] = useState([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
@@ -1648,6 +1649,42 @@ function ChatPage() {
                   </button>
                 );
               })}
+              <div className="mt-4 border-t border-[#3f4147] pt-4">
+  <button
+    onClick={() => setActivePanel("chat")}
+    className="mb-2 block w-full rounded px-3 py-2 text-left text-[#dbdee1] hover:bg-[#404249]"
+  >
+    💬 Chat
+  </button>
+
+  <button
+    onClick={() => setActivePanel("announcements")}
+    className="mb-2 block w-full rounded px-3 py-2 text-left text-[#dbdee1] hover:bg-[#404249]"
+  >
+    📢 Announcements
+  </button>
+
+  <button
+    onClick={() => setActivePanel("files")}
+    className="mb-2 block w-full rounded px-3 py-2 text-left text-[#dbdee1] hover:bg-[#404249]"
+  >
+    📁 Files
+  </button>
+
+  <button
+    onClick={() => setActivePanel("attendance")}
+    className="mb-2 block w-full rounded px-3 py-2 text-left text-[#dbdee1] hover:bg-[#404249]"
+  >
+    📊 Attendance
+  </button>
+
+  <button
+    onClick={() => setActivePanel("settings")}
+    className="block w-full rounded px-3 py-2 text-left text-[#dbdee1] hover:bg-[#404249]"
+  >
+    ⚙ Settings
+  </button>
+</div>
               {filteredGroups.length === 0 && (
                 <p className="px-2 py-4 text-center text-sm text-[#949ba4]">
                   {groups.length === 0
