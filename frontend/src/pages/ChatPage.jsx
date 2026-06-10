@@ -776,7 +776,7 @@ function AnnouncementsSection({
 }
 
 function ChatPage() {
-  const [activePanel, setActivePanel] = useState("chat");
+  const [activePanel, setActivePanel] = useState("");
   const { user } = useAuth();
   const [groups, setGroups] = useState([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
@@ -1860,6 +1860,7 @@ function ChatPage() {
           <div className="w-full space-y-0.5 py-3 sm:py-4 md:mx-auto md:max-w-4xl">
             {!groupsLoading && selectedGroup && (
               <>
+                {activePanel === "settings" && (
                 <SettingsPanel
                   values={passwordForm}
                   loading={passwordChangeLoading}
@@ -1867,7 +1868,7 @@ function ChatPage() {
                   success={passwordChangeSuccess}
                   onChange={handlePasswordFormChange}
                   onSubmit={handlePasswordChangeSubmit}
-                />
+                />)}
                 {canImportStudents && (
                   <StudentImportPanel
                     fileName={studentImportFile?.name ?? ""}
@@ -1879,12 +1880,13 @@ function ChatPage() {
                   />
                 )}
                 {user?.role === "STUDENT" && (
+                  activePanel === "attendance" && (
                   <AttendancePanel
                     attendance={myAttendance}
                     loading={attendanceLoading}
                     error={attendanceError}
                   />
-                )}
+                ))}
                 {canEditAttendance && (
                   <AttendanceUpdatePanel
                     members={groupMembers.filter(
@@ -1900,6 +1902,7 @@ function ChatPage() {
               </>
             )}
             {!groupsLoading && selectedGroup && (
+              activePanel === "announcements" && (
               <AnnouncementPanel
                 announcements={announcements}
                 loading={announcementsLoading}
@@ -1913,14 +1916,15 @@ function ChatPage() {
                 onContentChange={setAnnouncementContent}
                 onSubmit={handleCreateAnnouncement}
               />
-            )}
+            ))}
             {!groupsLoading && selectedGroup && (
+              activePanel === "files" && (
               <FilesPanel
                 files={files}
                 loading={filesLoading}
                 error={filesError}
               />
-            )}
+            ))}
             {groupsLoading ? (
               <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
                 <Loader2
