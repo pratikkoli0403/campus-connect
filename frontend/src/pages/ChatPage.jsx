@@ -1740,6 +1740,8 @@ function ChatPage() {
 
           <Hash className="hidden h-6 w-6 shrink-0 text-[#949ba4] sm:block" />
           <div className="min-w-0 flex-1">
+          {activePanel === "chat" && (
+            <>
             {groupsLoading ? (
               <>
                 <div className="h-4 w-32 animate-pulse rounded bg-[#404249]" />
@@ -1768,6 +1770,8 @@ function ChatPage() {
                   Choose a channel from the sidebar
                 </p>
               </>
+            )}
+            </>
             )}
           </div>
 
@@ -1869,7 +1873,8 @@ function ChatPage() {
                   onChange={handlePasswordFormChange}
                   onSubmit={handlePasswordChangeSubmit}
                 />)}
-                {canImportStudents && (
+                {canImportStudents &&
+  activePanel === "attendance" && (
                   <StudentImportPanel
                     fileName={studentImportFile?.name ?? ""}
                     loading={studentImportLoading}
@@ -1887,7 +1892,7 @@ function ChatPage() {
                     error={attendanceError}
                   />
                 ))}
-                {canEditAttendance && (
+                {canEditAttendance && activePanel === "attendance" && (
                   <AttendanceUpdatePanel
                     members={groupMembers.filter(
                       (member) => member.role === "STUDENT"
@@ -1925,7 +1930,9 @@ function ChatPage() {
                 error={filesError}
               />
             ))}
-            {groupsLoading ? (
+            {activePanel === "chat" && (
+  <>
+    {groupsLoading ? (
               <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
                 <Loader2
                   className="mb-4 h-10 w-10 animate-spin text-[#5865f2]"
@@ -1979,9 +1986,12 @@ function ChatPage() {
                 <div ref={messagesEndRef} className="h-px shrink-0" aria-hidden />
               </>
             )}
+              </>
+)}
           </div>
         </div>
-
+        {activePanel === "chat" && (
+  <>
         {/* Input */}
         <div className="shrink-0 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1 sm:px-3 sm:pb-4 md:px-4">
           {typingLabel && (
@@ -2069,6 +2079,8 @@ function ChatPage() {
             </button>
           </form>
         </div>
+        </>
+)}
       </div>
     </div>
   );
