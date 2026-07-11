@@ -6,8 +6,6 @@ import socket from "../sockets/socket";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Bell,
-  Download,
-  FileText,
   Gauge,
   Hash,
   Loader2,
@@ -32,11 +30,7 @@ import {
   createAnnouncement,
   getAnnouncements,
 } from "../services/announcementService.js";
-import {
-  getFiles,
-  resolveFileUrl,
-  uploadFile,
-} from "../services/fileService.js";
+import { getFiles, uploadFile } from "../services/fileService.js";
 import {
   getMyAttendance,
   updateAttendance,
@@ -66,13 +60,6 @@ function formatAnnouncementTime(iso) {
     day: "numeric",
     hour: "numeric",
     minute: "2-digit",
-  });
-}
-
-function formatFileTime(iso) {
-  return new Date(iso).toLocaleDateString([], {
-    month: "short",
-    day: "numeric",
   });
 }
 
@@ -301,84 +288,6 @@ function MessageRow({ message, showHeader, isOwn, isSenderOnline }) {
         </div>
       </div>
     </div>
-  );
-}
-
-
-function FileCard({ file }) {
-  const uploader = file.uploader ?? {
-    id: file.uploadedBy,
-    name: "Unknown user",
-  };
-
-  return (
-    <a
-      href={resolveFileUrl(file.fileUrl)}
-      target="_blank"
-      rel="noreferrer"
-      download
-      className="group flex min-w-0 items-center gap-3 rounded-lg border border-[#3f4147]/80 bg-[#2b2d31] p-3 text-left transition-colors hover:border-[#5865f2]/60 hover:bg-[#32343a]"
-    >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#5865f2]/15 text-[#b8c0ff] ring-1 ring-[#5865f2]/25">
-        <FileText className="h-5 w-5" aria-hidden />
-      </div>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-[#f2f3f5]">
-          {file.fileName}
-        </p>
-        <p className="truncate text-xs text-[#949ba4]">
-          {uploader.name} · {formatFileTime(file.createdAt)}
-        </p>
-      </div>
-      <Download
-        className="h-4 w-4 shrink-0 text-[#949ba4] transition-colors group-hover:text-[#f2f3f5]"
-        aria-hidden
-      />
-    </a>
-  );
-}
-
-function FilesSection({ files, loading, error }) {
-  return (
-    <section className="mx-2 mb-4 rounded-lg border border-[#1e1f22]/70 bg-[#313338] p-3 shadow-sm sm:mx-4 sm:p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <Paperclip className="h-5 w-5 shrink-0 text-[#b8c0ff]" />
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold text-[#f2f3f5]">
-              Shared files
-            </h2>
-            <p className="truncate text-xs text-[#949ba4]">
-              {files.length} uploaded
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="flex items-center gap-2 rounded-lg bg-[#2b2d31] px-3 py-3 text-sm text-[#949ba4]">
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-          Loading files...
-        </div>
-      ) : error ? (
-        <p
-          role="alert"
-          className="rounded-lg border border-[#ed4245]/30 bg-[#ed4245]/10 px-3 py-3 text-sm text-[#f23f42]"
-        >
-          {error}
-        </p>
-      ) : files.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-[#3f4147] bg-[#2b2d31]/70 px-3 py-4 text-sm text-[#949ba4]">
-          No files shared yet.
-        </div>
-      ) : (
-        <div className="grid gap-2 sm:grid-cols-2">
-          {files.map((file) => (
-            <FileCard key={file.id} file={file} />
-          ))}
-        </div>
-      )}
-    </section>
   );
 }
 
@@ -776,7 +685,7 @@ function AnnouncementsSection({
 }
 
 function ChatPage() {
-  const [activePanel, setActivePanel] = useState("");
+  const [activePanel, setActivePanel] = useState("chat");
   const { user } = useAuth();
   const [groups, setGroups] = useState([]);
   const [groupsLoading, setGroupsLoading] = useState(true);
@@ -1494,6 +1403,7 @@ function ChatPage() {
 
   function selectGroup(id) {
     setSelectedGroupId(id);
+    setActivePanel("chat");
     setAnnouncementTitle("");
     setAnnouncementContent("");
     setAnnouncementCreateError("");
@@ -1649,7 +1559,10 @@ function ChatPage() {
                   </button>
                 );
               })}
-              <div className="mt-4 border-t border-[#3f4147] pt-4">
+              <div
+  className="mt-4 border-t border-[#3f4147] pt-4"
+  style={{ background: "red" }}
+>
   <button
     onClick={() => setActivePanel("chat")}
     className="mb-2 block w-full rounded px-3 py-2 text-left text-[#dbdee1] hover:bg-[#404249]"

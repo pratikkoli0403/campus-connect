@@ -1,5 +1,6 @@
-import { Loader2 } from "lucide-react";
-import { Paperclip } from "lucide-react";
+import { Loader2, Paperclip } from "lucide-react";
+import FileCard from "./FileCard";
+
 export default function FilesPanel({ files, loading, error }) {
     return (
       <section className="mx-2 mb-4 rounded-lg border border-[#1e1f22]/70 bg-[#313338] p-3 shadow-sm sm:mx-4 sm:p-4">
