@@ -3,6 +3,7 @@ const multer = require("multer");
 const {
   uploadFile,
   getGroupFiles,
+  deleteFile,
 } = require("../controllers/file.controller");
 const authMiddleware = require("../middleware/auth.middleware");
 const { upload } = require("../middleware/upload.middleware");
@@ -29,5 +30,6 @@ function handleUpload(req, res, next) {
 
 router.post("/upload", authMiddleware, handleUpload, uploadFile);
 router.get("/:groupId", authMiddleware, getGroupFiles);
+router.delete("/:id", authMiddleware, deleteFile);
 
 module.exports = router;

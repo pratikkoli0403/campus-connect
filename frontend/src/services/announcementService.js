@@ -23,3 +23,10 @@ export const createAnnouncement = async ({ groupId, title, content }) => {
   );
   return data.data;
 };
+
+export const deleteAnnouncement = async (announcementId) => {
+  const { data } = await api.delete(`/announcements/${announcementId}`, {
+    headers: getAuthHeaders(),
+  });
+  return data.data;
+};

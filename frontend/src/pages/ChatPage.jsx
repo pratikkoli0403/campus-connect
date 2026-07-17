@@ -19,24 +19,35 @@ import {
   Send,
   Settings,
   Smile,
+  Trash2,
   Upload,
   Users,
   X,
 } from "lucide-react";
 import { useAuth } from "../context/authContext.js";
 import { getGroupMembers, getGroups } from "../services/groupService.js";
-import { getMessages } from "../services/messageService";
+import { deleteMessage, getMessages } from "../services/messageService";
 import {
   createAnnouncement,
+  deleteAnnouncement,
   getAnnouncements,
 } from "../services/announcementService.js";
-import { getFiles, uploadFile } from "../services/fileService.js";
+import { getFiles, uploadFile, deleteFile } from "../services/fileService.js";
 import {
   getMyAttendance,
   updateAttendance,
 } from "../services/attendanceService.js";
 import { importStudents } from "../services/adminService.js";
 import { changePassword } from "../services/authService.js";
+import {
+  canManageAnnouncements,
+  canManageAttendance,
+  canImportStudents,
+  canDeleteMessage,
+  canDeleteAnnouncement,
+  canDeleteFile,
+  isStudent,
+} from "../utils/permissions.js";
 
 function getStoredUser() {
   try {
@@ -61,14 +72,6 @@ function formatAnnouncementTime(iso) {
     hour: "numeric",
     minute: "2-digit",
   });
-}
-
-function canManageAnnouncements(role) {
-  return ["ADMIN", "FACULTY", "TEACHER"].includes(role);
-}
-
-function canManageAttendance(role) {
-  return ["ADMIN", "TEACHER"].includes(role);
 }
 
 function formatAttendance(value) {
@@ -212,17 +215,166 @@ function UserAvatar({ user, online, size = "md" }) {
   );
 }
 
-function MessageRow({ message, showHeader, isOwn, isSenderOnline }) {
+function MessageRow({
+  message,
+  showHeader,
+  isOwn,
+  isSenderOnline,
+  canDelete,
+  isDeleting,
+  deleteError,
+  onDelete,
+}) {
   const { sender, content, createdAt } = message;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const menuRef = useRef(null);
   const bubbleBase =
     "max-w-[min(92vw,28rem)] rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-sm sm:max-w-[min(85%,28rem)] sm:px-3.5 sm:text-[15px] md:max-w-md";
+
+  useEffect(() => {
+    if (!menuOpen && !confirmOpen) return;
+
+    function handlePointerDown(event) {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setMenuOpen(false);
+        setConfirmOpen(false);
+      }
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        setConfirmOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [menuOpen, confirmOpen]);
+
+  useEffect(() => {
+    if (!canDelete) {
+      setMenuOpen(false);
+      setConfirmOpen(false);
+    }
+  }, [canDelete]);
+
+  function handleMenuToggle(event) {
+    event.stopPropagation();
+    if (isDeleting) return;
+    setConfirmOpen(false);
+    setMenuOpen((open) => !open);
+  }
+
+  function handleDeleteClick(event) {
+    event.stopPropagation();
+    setMenuOpen(false);
+    setConfirmOpen(true);
+  }
+
+  function handleConfirmCancel(event) {
+    event.stopPropagation();
+    setConfirmOpen(false);
+  }
+
+  function handleConfirmDelete(event) {
+    event.stopPropagation();
+    setConfirmOpen(false);
+    onDelete?.(message);
+  }
+
+  const actions = canDelete ? (
+    <div
+      ref={menuRef}
+      className={`relative shrink-0 ${
+        isOwn ? "order-first mr-1" : "ml-1"
+      }`}
+    >
+      <button
+        type="button"
+        aria-label="Message actions"
+        aria-haspopup="menu"
+        aria-expanded={menuOpen || confirmOpen}
+        disabled={isDeleting}
+        onClick={handleMenuToggle}
+        className={`flex h-7 w-7 items-center justify-center rounded-md text-[#b5bac1] transition-all hover:bg-[#1e1f22]/80 hover:text-[#f2f3f5] focus:bg-[#1e1f22]/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5865f2]/50 disabled:cursor-not-allowed disabled:opacity-50 ${
+          menuOpen || confirmOpen || isDeleting
+            ? "opacity-100"
+            : "opacity-0 group-hover:opacity-100 focus:opacity-100"
+        }`}
+      >
+        {isDeleting ? (
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        ) : (
+          <MoreVertical className="h-4 w-4" aria-hidden />
+        )}
+      </button>
+
+      {menuOpen && (
+        <div
+          role="menu"
+          className={`absolute z-30 mt-1 min-w-[10.5rem] overflow-hidden rounded-md border border-[#1e1f22]/80 bg-[#111214] py-1 shadow-xl ring-1 ring-black/30 ${
+            isOwn ? "right-0" : "left-0"
+          }`}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={handleDeleteClick}
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#f23f42] transition-colors hover:bg-[#ed4245] hover:text-white"
+          >
+            <Trash2 className="h-4 w-4" aria-hidden />
+            Delete Message
+          </button>
+        </div>
+      )}
+
+      {confirmOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirm delete message"
+          className={`absolute z-40 mt-1 w-[min(16rem,calc(100vw-2rem))] rounded-lg border border-[#1e1f22]/80 bg-[#2b2d31] p-3 shadow-2xl ring-1 ring-black/30 ${
+            isOwn ? "right-0" : "left-0"
+          }`}
+        >
+          <p className="text-sm font-semibold text-[#f2f3f5]">Delete message?</p>
+          <p className="mt-1 text-xs leading-relaxed text-[#b5bac1]">
+            This cannot be undone. The message will be removed for everyone in
+            this channel.
+          </p>
+          <div className="mt-3 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={handleConfirmCancel}
+              className="rounded-md px-2.5 py-1.5 text-xs font-medium text-[#dbdee1] transition-colors hover:bg-[#404249] hover:text-[#f2f3f5]"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmDelete}
+              className="rounded-md bg-[#da373c] px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#a12828]"
+            >
+              Delete
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  ) : null;
 
   if (isOwn) {
     return (
       <div
         className={`group flex justify-end px-2 sm:px-4 ${
           showHeader ? "mt-3 first:mt-0" : "mt-1"
-        }`}
+        } ${isDeleting ? "opacity-60" : ""}`}
       >
         <div className="flex min-w-0 flex-col items-end">
           {showHeader && (
@@ -236,11 +388,27 @@ function MessageRow({ message, showHeader, isOwn, isSenderOnline }) {
               </span>
             </div>
           )}
-          <div
-            className={`${bubbleBase} rounded-br-md bg-[#5865f2] text-white`}
-          >
-            <p className="break-words">{content}</p>
+          <div className="flex items-start">
+            {actions}
+            <div
+              className={`${bubbleBase} rounded-br-md bg-[#5865f2] text-white`}
+            >
+              <p className="break-words">{content}</p>
+              {message.fileName && (
+                <p className="mt-1 truncate text-xs text-white/80">
+                  {message.fileName}
+                </p>
+              )}
+            </div>
           </div>
+          {deleteError && (
+            <p
+              role="alert"
+              className="mt-1 max-w-[min(92vw,28rem)] px-1 text-xs text-[#f23f42]"
+            >
+              {deleteError}
+            </p>
+          )}
           {!showHeader && (
             <span className="mt-0.5 px-1 text-[10px] text-[#949ba4] opacity-0 transition-opacity group-hover:opacity-100">
               {formatMessageTime(createdAt)}
@@ -255,7 +423,7 @@ function MessageRow({ message, showHeader, isOwn, isSenderOnline }) {
     <div
       className={`group flex justify-start gap-2 px-2 sm:gap-3 sm:px-4 ${
         showHeader ? "mt-3 first:mt-0" : "mt-1"
-      }`}
+      } ${isDeleting ? "opacity-60" : ""}`}
     >
       {showHeader ? (
         <div className="mt-0.5 shrink-0 max-sm:scale-90 max-sm:origin-top-left sm:scale-100">
@@ -281,11 +449,27 @@ function MessageRow({ message, showHeader, isOwn, isSenderOnline }) {
             </span>
           </div>
         )}
-        <div
-          className={`${bubbleBase} rounded-bl-md border border-[#1e1f22]/40 bg-[#404249] text-[#dbdee1]`}
-        >
-          <p className="break-words">{content}</p>
+        <div className="flex items-start">
+          <div
+            className={`${bubbleBase} rounded-bl-md border border-[#1e1f22]/40 bg-[#404249] text-[#dbdee1]`}
+          >
+            <p className="break-words">{content}</p>
+            {message.fileName && (
+              <p className="mt-1 truncate text-xs text-[#b5bac1]">
+                {message.fileName}
+              </p>
+            )}
+          </div>
+          {actions}
         </div>
+        {deleteError && (
+          <p
+            role="alert"
+            className="mt-1 max-w-[min(92vw,28rem)] px-0.5 text-xs text-[#f23f42]"
+          >
+            {deleteError}
+          </p>
+        )}
       </div>
     </div>
   );
@@ -695,12 +879,22 @@ function ChatPage() {
   const [isMobileLayout, setIsMobileLayout] = useState(false);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
+  const [deletingMessageId, setDeletingMessageId] = useState(null);
+  const [deleteErrorMessageId, setDeleteErrorMessageId] = useState(null);
+  const [messageDeleteError, setMessageDeleteError] = useState("");
   const [announcements, setAnnouncements] = useState([]);
   const [announcementsLoading, setAnnouncementsLoading] = useState(false);
   const [announcementsError, setAnnouncementsError] = useState("");
+  const [deletingAnnouncementId, setDeletingAnnouncementId] = useState(null);
+  const [deleteErrorAnnouncementId, setDeleteErrorAnnouncementId] =
+    useState(null);
+  const [announcementDeleteError, setAnnouncementDeleteError] = useState("");
   const [files, setFiles] = useState([]);
   const [filesLoading, setFilesLoading] = useState(false);
   const [filesError, setFilesError] = useState("");
+  const [deletingFileId, setDeletingFileId] = useState(null);
+  const [deleteErrorFileId, setDeleteErrorFileId] = useState(null);
+  const [fileDeleteError, setFileDeleteError] = useState("");
   const [fileUploadLoading, setFileUploadLoading] = useState(false);
   const [fileUploadError, setFileUploadError] = useState("");
   const [myAttendance, setMyAttendance] = useState(null);
@@ -753,7 +947,8 @@ function ChatPage() {
 
   const canCreateAnnouncements = canManageAnnouncements(user?.role);
   const canEditAttendance = canManageAttendance(user?.role);
-  const canImportStudents = canManageAttendance(user?.role);
+  const canImportStudentsUi = canImportStudents(user?.role);
+  const showStudentAttendance = isStudent(user?.role);
 
   const clearTypingExpiry = useCallback((key) => {
     const timer = typingExpiryTimersRef.current.get(key);
@@ -945,6 +1140,10 @@ function ChatPage() {
         return;
       }
 
+      setDeletingMessageId(null);
+      setDeleteErrorMessageId(null);
+      setMessageDeleteError("");
+
       try {
         const data = await getMessages(selectedGroupId);
         if (!cancelled) setMessages(data ?? []);
@@ -969,12 +1168,18 @@ function ChatPage() {
       if (selectedGroupId == null) {
         setAnnouncements([]);
         setAnnouncementsError("");
+        setDeletingAnnouncementId(null);
+        setDeleteErrorAnnouncementId(null);
+        setAnnouncementDeleteError("");
         return;
       }
 
       setAnnouncementsLoading(true);
       setAnnouncementsError("");
       setAnnouncementCreateError("");
+      setDeletingAnnouncementId(null);
+      setDeleteErrorAnnouncementId(null);
+      setAnnouncementDeleteError("");
       try {
         const data = await getAnnouncements(selectedGroupId);
         if (!cancelled) setAnnouncements(data ?? []);
@@ -1003,12 +1208,18 @@ function ChatPage() {
       if (selectedGroupId == null) {
         setFiles([]);
         setFilesError("");
+        setDeletingFileId(null);
+        setDeleteErrorFileId(null);
+        setFileDeleteError("");
         return;
       }
 
       setFilesLoading(true);
       setFilesError("");
       setFileUploadError("");
+      setDeletingFileId(null);
+      setDeleteErrorFileId(null);
+      setFileDeleteError("");
       try {
         const data = await getFiles(selectedGroupId);
         if (!cancelled) setFiles(data ?? []);
@@ -1042,10 +1253,89 @@ function ChatPage() {
       });
     };
 
+    const onMessageDeleted = (payload) => {
+      const deletedId = Number(payload?.id);
+      const groupId = Number(payload?.groupId);
+      if (!Number.isInteger(deletedId) || deletedId < 1) return;
+      if (
+        Number.isInteger(groupId) &&
+        groupId > 0 &&
+        groupId !== Number(selectedGroupId)
+      ) {
+        return;
+      }
+
+      setMessages((prev) => prev.filter((m) => Number(m.id) !== deletedId));
+      if (payload?.fileUrl) {
+        setFiles((prev) =>
+          prev.filter((file) => file.fileUrl !== payload.fileUrl)
+        );
+      }
+      setDeletingMessageId((current) =>
+        Number(current) === deletedId ? null : current
+      );
+      setDeleteErrorMessageId((current) =>
+        Number(current) === deletedId ? null : current
+      );
+      setMessageDeleteError("");
+    };
+
+    const onAnnouncementDeleted = (payload) => {
+      const deletedId = Number(payload?.id);
+      const groupId = Number(payload?.groupId);
+      if (!Number.isInteger(deletedId) || deletedId < 1) return;
+      if (
+        Number.isInteger(groupId) &&
+        groupId > 0 &&
+        groupId !== Number(selectedGroupId)
+      ) {
+        return;
+      }
+
+      setAnnouncements((prev) =>
+        prev.filter((item) => Number(item.id) !== deletedId)
+      );
+      setDeletingAnnouncementId((current) =>
+        Number(current) === deletedId ? null : current
+      );
+      setDeleteErrorAnnouncementId((current) =>
+        Number(current) === deletedId ? null : current
+      );
+      setAnnouncementDeleteError("");
+    };
+
+    const onFileDeleted = (payload) => {
+      const deletedId = Number(payload?.id);
+      const groupId = Number(payload?.groupId);
+      if (!Number.isInteger(deletedId) || deletedId < 1) return;
+      if (
+        Number.isInteger(groupId) &&
+        groupId > 0 &&
+        groupId !== Number(selectedGroupId)
+      ) {
+        return;
+      }
+
+      setFiles((prev) => prev.filter((file) => Number(file.id) !== deletedId));
+      setDeletingFileId((current) =>
+        Number(current) === deletedId ? null : current
+      );
+      setDeleteErrorFileId((current) =>
+        Number(current) === deletedId ? null : current
+      );
+      setFileDeleteError("");
+    };
+
     socket.on("receiveMessage", onReceiveMessage);
+    socket.on("message_deleted", onMessageDeleted);
+    socket.on("announcement_deleted", onAnnouncementDeleted);
+    socket.on("file_deleted", onFileDeleted);
 
     return () => {
       socket.off("receiveMessage", onReceiveMessage);
+      socket.off("message_deleted", onMessageDeleted);
+      socket.off("announcement_deleted", onAnnouncementDeleted);
+      socket.off("file_deleted", onFileDeleted);
     };
   }, [selectedGroupId]);
 
@@ -1179,6 +1469,34 @@ function ChatPage() {
     setEmojiPickerOpen(false);
   }
 
+  async function handleDeleteMessage(message) {
+    if (!message?.id || deletingMessageId != null) return;
+    if (!canDeleteMessage(user, message)) return;
+
+    setDeletingMessageId(message.id);
+    setDeleteErrorMessageId(null);
+    setMessageDeleteError("");
+
+    try {
+      await deleteMessage(message.id);
+      setMessages((prev) =>
+        prev.filter((m) => Number(m.id) !== Number(message.id))
+      );
+      if (message.fileUrl) {
+        setFiles((prev) =>
+          prev.filter((file) => file.fileUrl !== message.fileUrl)
+        );
+      }
+    } catch (err) {
+      setDeleteErrorMessageId(message.id);
+      setMessageDeleteError(
+        err.response?.data?.message ?? "Failed to delete message."
+      );
+    } finally {
+      setDeletingMessageId(null);
+    }
+  }
+
   function handleSend(e) {
     e.preventDefault();
     sendMessage();
@@ -1263,7 +1581,7 @@ function ChatPage() {
 
   async function handleStudentImportSubmit(e) {
     e.preventDefault();
-    if (!studentImportFile || !canImportStudents) return;
+    if (!studentImportFile || !canImportStudentsUi) return;
 
     setStudentImportLoading(true);
     setStudentImportError("");
@@ -1401,12 +1719,64 @@ function ChatPage() {
     }
   }
 
+  async function handleDeleteAnnouncement(announcement) {
+    if (!announcement?.id || deletingAnnouncementId != null) return;
+    if (!canDeleteAnnouncement(user, announcement)) return;
+
+    setDeletingAnnouncementId(announcement.id);
+    setDeleteErrorAnnouncementId(null);
+    setAnnouncementDeleteError("");
+
+    try {
+      await deleteAnnouncement(announcement.id);
+      setAnnouncements((prev) =>
+        prev.filter((item) => Number(item.id) !== Number(announcement.id))
+      );
+    } catch (err) {
+      setDeleteErrorAnnouncementId(announcement.id);
+      setAnnouncementDeleteError(
+        err.response?.data?.message ?? "Failed to delete announcement."
+      );
+    } finally {
+      setDeletingAnnouncementId(null);
+    }
+  }
+
+  async function handleDeleteFile(file) {
+    if (!file?.id || deletingFileId != null) return;
+    if (!canDeleteFile(user, file)) return;
+
+    setDeletingFileId(file.id);
+    setDeleteErrorFileId(null);
+    setFileDeleteError("");
+
+    try {
+      await deleteFile(file.id);
+      setFiles((prev) =>
+        prev.filter((item) => Number(item.id) !== Number(file.id))
+      );
+    } catch (err) {
+      setDeleteErrorFileId(file.id);
+      setFileDeleteError(
+        err.response?.data?.message ?? "Failed to delete file."
+      );
+    } finally {
+      setDeletingFileId(null);
+    }
+  }
+
   function selectGroup(id) {
     setSelectedGroupId(id);
     setActivePanel("chat");
     setAnnouncementTitle("");
     setAnnouncementContent("");
     setAnnouncementCreateError("");
+    setDeletingAnnouncementId(null);
+    setDeleteErrorAnnouncementId(null);
+    setAnnouncementDeleteError("");
+    setDeletingFileId(null);
+    setDeleteErrorFileId(null);
+    setFileDeleteError("");
     setFileUploadError("");
     setAttendanceUpdateError("");
     setStudentImportFile(null);
@@ -1559,10 +1929,7 @@ function ChatPage() {
                   </button>
                 );
               })}
-              <div
-  className="mt-4 border-t border-[#3f4147] pt-4"
-  style={{ background: "red" }}
->
+              <div className="mt-4 border-t border-[#3f4147] pt-4">
   <button
     onClick={() => setActivePanel("chat")}
     className="mb-2 block w-full rounded px-3 py-2 text-left text-[#dbdee1] hover:bg-[#404249]"
@@ -1786,7 +2153,7 @@ function ChatPage() {
                   onChange={handlePasswordFormChange}
                   onSubmit={handlePasswordChangeSubmit}
                 />)}
-                {canImportStudents &&
+                {canImportStudentsUi &&
   activePanel === "attendance" && (
                   <StudentImportPanel
                     fileName={studentImportFile?.name ?? ""}
@@ -1797,7 +2164,7 @@ function ChatPage() {
                     onSubmit={handleStudentImportSubmit}
                   />
                 )}
-                {user?.role === "STUDENT" && (
+                {showStudentAttendance && (
                   activePanel === "attendance" && (
                   <AttendancePanel
                     attendance={myAttendance}
@@ -1833,6 +2200,13 @@ function ChatPage() {
                 onTitleChange={setAnnouncementTitle}
                 onContentChange={setAnnouncementContent}
                 onSubmit={handleCreateAnnouncement}
+                canDeleteAnnouncement={(announcement) =>
+                  canDeleteAnnouncement(user, announcement)
+                }
+                deletingAnnouncementId={deletingAnnouncementId}
+                deleteErrorAnnouncementId={deleteErrorAnnouncementId}
+                announcementDeleteError={announcementDeleteError}
+                onDeleteAnnouncement={handleDeleteAnnouncement}
               />
             ))}
             {!groupsLoading && selectedGroup && (
@@ -1841,6 +2215,11 @@ function ChatPage() {
                 files={files}
                 loading={filesLoading}
                 error={filesError}
+                canDeleteFile={(file) => canDeleteFile(user, file)}
+                deletingFileId={deletingFileId}
+                deleteErrorFileId={deleteErrorFileId}
+                fileDeleteError={fileDeleteError}
+                onDeleteFile={handleDeleteFile}
               />
             ))}
             {activePanel === "chat" && (
@@ -1893,6 +2272,14 @@ function ChatPage() {
                       showHeader={showHeader}
                       isOwn={isOwn}
                       isSenderOnline={isUserOnline(msg.sender.id)}
+                      canDelete={canDeleteMessage(user, msg)}
+                      isDeleting={Number(deletingMessageId) === Number(msg.id)}
+                      deleteError={
+                        Number(deleteErrorMessageId) === Number(msg.id)
+                          ? messageDeleteError
+                          : ""
+                      }
+                      onDelete={handleDeleteMessage}
                     />
                   );
                 })}

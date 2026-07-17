@@ -60,6 +60,9 @@ model Message {
   id      Int    @id @default(autoincrement())
   content String
 
+  fileUrl  String?
+  fileName String?
+
   senderId Int
   groupId  Int
 

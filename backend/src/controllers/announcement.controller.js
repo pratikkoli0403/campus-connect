@@ -1,18 +1,21 @@
 const prisma = require("../config/prisma");
+const {
+  canCreateAnnouncement,
+  canDeleteAnnouncement,
+  canAccessGroup,
+} = require("../utils/permissions");
 
-const ANNOUNCEMENT_AUTHOR_ROLES = new Set(["ADMIN", "FACULTY", "TEACHER"]);
-
-function canCreateAnnouncement(role) {
-  return ANNOUNCEMENT_AUTHOR_ROLES.has(role);
-}
-
-function parseGroupId(rawGroupId) {
-  if (rawGroupId === undefined || rawGroupId === null || rawGroupId === "") {
+function parsePositiveInt(raw) {
+  if (raw === undefined || raw === null || raw === "") {
     return null;
   }
 
-  const groupId = Number(rawGroupId);
-  return Number.isInteger(groupId) && groupId > 0 ? groupId : null;
+  const value = Number(raw);
+  return Number.isInteger(value) && value > 0 ? value : null;
+}
+
+function parseGroupId(rawGroupId) {
+  return parsePositiveInt(rawGroupId);
 }
 
 async function getUserAccess(userId, groupId) {
@@ -44,10 +47,6 @@ async function getUserAccess(userId, groupId) {
     group,
     isGroupMember: Boolean(membership),
   };
-}
-
-function canAccessGroup(user, isGroupMember) {
-  return user?.role === "ADMIN" || isGroupMember;
 }
 
 const createAnnouncement = async (req, res) => {
@@ -218,7 +217,76 @@ const getGroupAnnouncements = async (req, res) => {
   }
 };
 
+const deleteAnnouncement = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const role = req.user?.role;
+
+    if (userId == null) {
+      return res.status(401).json({
+        success: false,
+        message: "User could not be authenticated.",
+      });
+    }
+
+    const announcementId = parsePositiveInt(req.params.id);
+
+    if (announcementId == null) {
+      return res.status(400).json({
+        success: false,
+        message: "Announcement id must be a positive integer.",
+      });
+    }
+
+    const announcement = await prisma.announcement.findUnique({
+      where: { id: announcementId },
+    });
+
+    if (!announcement) {
+      return res.status(404).json({
+        success: false,
+        message: "Announcement not found.",
+      });
+    }
+
+    if (!canDeleteAnnouncement({ id: userId, role }, announcement)) {
+      return res.status(403).json({
+        success: false,
+        message: "You do not have permission to delete this announcement.",
+      });
+    }
+
+    await prisma.announcement.delete({
+      where: { id: announcementId },
+    });
+
+    const io = req.app.get("io");
+    if (io) {
+      io.to(String(announcement.groupId)).emit("announcement_deleted", {
+        id: announcement.id,
+        groupId: announcement.groupId,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Announcement deleted successfully.",
+      data: {
+        id: announcement.id,
+        groupId: announcement.groupId,
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Failed to delete announcement.",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   createAnnouncement,
   getGroupAnnouncements,
+  deleteAnnouncement,
 };

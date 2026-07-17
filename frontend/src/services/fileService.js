@@ -24,6 +24,13 @@ export const uploadFile = async ({ groupId, file }) => {
   return data.data;
 };
 
+export const deleteFile = async (fileId) => {
+  const { data } = await api.delete(`/files/${fileId}`, {
+    headers: getAuthHeaders(),
+  });
+  return data.data;
+};
+
 export const resolveFileUrl = (fileUrl) => {
   if (!fileUrl) return "#";
   if (/^https?:\/\//i.test(fileUrl)) return fileUrl;

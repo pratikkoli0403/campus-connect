@@ -1,8 +1,5 @@
 const prisma = require("../config/prisma");
-
-function canUpdateAttendance(role) {
-  return ["ADMIN", "TEACHER"].includes(role);
-}
+const { canUpdateAttendance } = require("../utils/permissions");
 
 function parseUserId(rawUserId) {
   const userId = Number(rawUserId);
@@ -62,12 +59,11 @@ const getMyAttendance = async (req, res) => {
 };
 
 const updateAttendance = async (req, res) => {
-  try { console.log("REQ USER:", req.user);
-    console.log("ROLE:", req.user?.role);
+  try {
     if (!canUpdateAttendance(req.user?.role)) {
       return res.status(403).json({
         success: false,
-        message: "Only admins or teachers can update attendance.",
+        message: "Only admins or faculty can update attendance.",
       });
     }
 

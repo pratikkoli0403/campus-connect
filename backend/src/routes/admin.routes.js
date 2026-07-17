@@ -3,17 +3,18 @@ const multer = require("multer");
 const { importStudents } = require("../controllers/admin.controller");
 const authMiddleware = require("../middleware/auth.middleware");
 const { importUpload } = require("../middleware/importUpload.middleware");
+const { canImportStudents } = require("../utils/permissions");
 
 const router = express.Router();
 
-function requireAdminOrTeacher(req, res, next) {
-  if (["ADMIN", "TEACHER"].includes(req.user?.role)) {
+function requireImportAccess(req, res, next) {
+  if (canImportStudents(req.user?.role)) {
     return next();
   }
 
   return res.status(403).json({
     success: false,
-    message: "Only admins or teachers can import students.",
+    message: "Only admins or faculty can import students.",
   });
 }
 
@@ -38,7 +39,7 @@ function handleImportUpload(req, res, next) {
 router.post(
   "/import-students",
   authMiddleware,
-  requireAdminOrTeacher,
+  requireImportAccess,
   handleImportUpload,
   importStudents
 );
