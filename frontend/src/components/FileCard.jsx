@@ -50,10 +50,12 @@ export default function FileCard({
   }, [menuOpen, confirmOpen]);
 
   useEffect(() => {
-    if (!canDelete) {
+    if (canDelete) return undefined;
+    const timer = window.setTimeout(() => {
       setMenuOpen(false);
       setConfirmOpen(false);
-    }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [canDelete]);
 
   function handleMenuToggle(event) {
@@ -86,7 +88,7 @@ export default function FileCard({
 
   return (
     <div
-      className={`group relative flex min-w-0 flex-col rounded-lg border border-[#3f4147]/80 bg-[#2b2d31] transition-colors hover:border-[#5865f2]/60 hover:bg-[#32343a] ${
+      className={`group relative flex min-w-0 flex-col rounded-lg border border-[#3f4147]/80 bg-[#2b2d31] shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#5865f2]/60 hover:bg-[#32343a] hover:shadow-md ${
         isDeleting ? "opacity-60" : ""
       }`}
     >
@@ -96,7 +98,8 @@ export default function FileCard({
           target="_blank"
           rel="noreferrer"
           download
-          className="flex min-w-0 flex-1 items-center gap-3 text-left transition-colors"
+          aria-label={`Download ${file.fileName}`}
+          className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5865f2]/60"
         >
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#5865f2]/15 text-[#b8c0ff] ring-1 ring-[#5865f2]/25">
             <FileText className="h-5 w-5" aria-hidden />
@@ -109,10 +112,9 @@ export default function FileCard({
               {uploader.name} · {formatFileTime(file.createdAt)}
             </p>
           </div>
-          <Download
-            className="h-4 w-4 shrink-0 text-[#949ba4] transition-colors group-hover:text-[#f2f3f5]"
-            aria-hidden
-          />
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#1e1f22] text-[#949ba4] transition-colors group-hover:text-[#f2f3f5]">
+            <Download className="h-4 w-4" aria-hidden />
+          </span>
         </a>
 
         {canDelete && (
@@ -146,7 +148,7 @@ export default function FileCard({
                   type="button"
                   role="menuitem"
                   onClick={handleDeleteClick}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#f23f42] transition-colors hover:bg-[#ed4245] hover:text-white"
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-[#f23f42] transition-colors hover:bg-[#ed4245] hover:text-white focus:outline-none focus-visible:bg-[#ed4245] focus-visible:text-white"
                 >
                   <Trash2 className="h-4 w-4" aria-hidden />
                   Delete
@@ -172,14 +174,14 @@ export default function FileCard({
                   <button
                     type="button"
                     onClick={handleConfirmCancel}
-                    className="rounded-md px-2.5 py-1.5 text-xs font-medium text-[#dbdee1] transition-colors hover:bg-[#404249] hover:text-[#f2f3f5]"
+                    className="rounded-md px-2.5 py-1.5 text-xs font-medium text-[#dbdee1] transition-colors hover:bg-[#404249] hover:text-[#f2f3f5] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5865f2]/60"
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
                     onClick={handleConfirmDelete}
-                    className="rounded-md bg-[#da373c] px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#a12828]"
+                    className="rounded-md bg-[#da373c] px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#a12828] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#f23f42]/70"
                   >
                     Delete
                   </button>

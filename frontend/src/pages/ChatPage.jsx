@@ -32,7 +32,12 @@ import {
   deleteAnnouncement,
   getAnnouncements,
 } from "../services/announcementService.js";
-import { getFiles, uploadFile, deleteFile } from "../services/fileService.js";
+import {
+  getFiles,
+  uploadFile,
+  deleteFile,
+  resolveFileUrl,
+} from "../services/fileService.js";
 import {
   getMyAttendance,
   updateAttendance,
@@ -60,15 +65,6 @@ function getStoredUser() {
 
 function formatMessageTime(iso) {
   return new Date(iso).toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-function formatAnnouncementTime(iso) {
-  return new Date(iso).toLocaleString([], {
-    month: "short",
-    day: "numeric",
     hour: "numeric",
     minute: "2-digit",
   });
@@ -137,6 +133,22 @@ const CHAT_EMOJIS = [
   "💯",
 ];
 
+const PANEL_NAV_ITEMS = [
+  { id: "chat", label: "Chat", icon: Hash },
+  { id: "announcements", label: "Announcements", icon: Megaphone },
+  { id: "files", label: "Files", icon: Paperclip },
+  { id: "attendance", label: "Attendance", icon: Gauge },
+  { id: "settings", label: "Settings", icon: Settings },
+];
+
+const PANEL_TITLES = {
+  chat: "Chat",
+  announcements: "Announcements",
+  files: "Files",
+  attendance: "Attendance",
+  settings: "Settings",
+};
+
 function formatTypingLabel(names) {
   if (names.length === 0) return "";
   if (names.length === 1) return `${names[0]} is typing…`;
@@ -164,6 +176,43 @@ function EmojiPicker({ onSelect }) {
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function EmptyState({ icon: Icon = Hash, title, description }) {
+  return (
+    <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[#404249]/80 ring-1 ring-[#1e1f22]/70">
+        <Icon className="h-8 w-8 text-[#949ba4]" aria-hidden />
+      </div>
+      <h2 className="max-w-md text-xl font-bold text-[#f2f3f5]">{title}</h2>
+      <p className="mt-2 max-w-sm text-sm leading-relaxed text-[#b5bac1]">
+        {description}
+      </p>
+    </div>
+  );
+}
+
+function ChatSkeleton() {
+  return (
+    <div className="space-y-5 px-3 py-4 sm:px-4" aria-label="Loading chat">
+      {[0, 1, 2, 3, 4].map((item) => (
+        <div
+          key={item}
+          className={`flex gap-3 ${item % 2 ? "justify-end" : "justify-start"}`}
+        >
+          {item % 2 === 0 && (
+            <div className="h-10 w-10 shrink-0 animate-pulse rounded-full bg-[#404249]" />
+          )}
+          <div className="w-[min(78%,28rem)] space-y-2">
+            {item % 2 === 0 && (
+              <div className="h-3 w-32 animate-pulse rounded bg-[#404249]" />
+            )}
+            <div className="h-10 animate-pulse rounded-2xl bg-[#404249]" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -230,7 +279,7 @@ function MessageRow({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const menuRef = useRef(null);
   const bubbleBase =
-    "max-w-[min(92vw,28rem)] rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-sm sm:max-w-[min(85%,28rem)] sm:px-3.5 sm:text-[15px] md:max-w-md";
+    "max-w-[min(92vw,31rem)] rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-sm sm:max-w-[min(85%,31rem)] sm:px-3.5 sm:text-[15px] md:max-w-lg";
 
   useEffect(() => {
     if (!menuOpen && !confirmOpen) return;
@@ -258,10 +307,12 @@ function MessageRow({
   }, [menuOpen, confirmOpen]);
 
   useEffect(() => {
-    if (!canDelete) {
+    if (canDelete) return undefined;
+    const timer = window.setTimeout(() => {
       setMenuOpen(false);
       setConfirmOpen(false);
-    }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [canDelete]);
 
   function handleMenuToggle(event) {
@@ -391,13 +442,20 @@ function MessageRow({
           <div className="flex items-start">
             {actions}
             <div
-              className={`${bubbleBase} rounded-br-md bg-[#5865f2] text-white`}
+              className={`${bubbleBase} rounded-br-md bg-[#5865f2] text-white ring-1 ring-white/10`}
             >
               <p className="break-words">{content}</p>
               {message.fileName && (
-                <p className="mt-1 truncate text-xs text-white/80">
-                  {message.fileName}
-                </p>
+                <a
+                  href={message.fileUrl ? resolveFileUrl(message.fileUrl) : undefined}
+                  target="_blank"
+                  rel="noreferrer"
+                  download
+                  className="mt-2 flex min-w-0 items-center gap-2 rounded-lg bg-white/10 px-2.5 py-2 text-left text-xs text-white/90 ring-1 ring-white/15 transition-colors hover:bg-white/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                >
+                  <Paperclip className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="truncate font-medium">{message.fileName}</span>
+                </a>
               )}
             </div>
           </div>
@@ -451,13 +509,20 @@ function MessageRow({
         )}
         <div className="flex items-start">
           <div
-            className={`${bubbleBase} rounded-bl-md border border-[#1e1f22]/40 bg-[#404249] text-[#dbdee1]`}
+            className={`${bubbleBase} rounded-bl-md border border-[#1e1f22]/50 bg-[#393b41] text-[#dbdee1] ring-1 ring-white/[0.03]`}
           >
             <p className="break-words">{content}</p>
             {message.fileName && (
-              <p className="mt-1 truncate text-xs text-[#b5bac1]">
-                {message.fileName}
-              </p>
+              <a
+                href={message.fileUrl ? resolveFileUrl(message.fileUrl) : undefined}
+                target="_blank"
+                rel="noreferrer"
+                download
+                className="mt-2 flex min-w-0 items-center gap-2 rounded-lg border border-[#1e1f22]/50 bg-[#2b2d31] px-2.5 py-2 text-left text-xs text-[#dbdee1] transition-colors hover:border-[#5865f2]/50 hover:bg-[#32343a] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5865f2]/60"
+              >
+                <Paperclip className="h-4 w-4 shrink-0 text-[#b8c0ff]" aria-hidden />
+                <span className="truncate font-medium">{message.fileName}</span>
+              </a>
             )}
           </div>
           {actions}
@@ -496,7 +561,7 @@ function StudentImportPanel({
     .join("\n");
 
   return (
-    <section className="mx-2 mb-4 rounded-lg border border-[#1e1f22]/70 bg-[#313338] p-3 shadow-sm sm:mx-4 sm:p-4">
+    <section className="mx-2 mb-4 rounded-lg border border-[#1e1f22]/70 bg-[#313338] p-3 shadow-sm ring-1 ring-white/[0.02] sm:mx-4 sm:p-4">
       <div className="mb-3 flex min-w-0 items-center gap-2">
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#5865f2]/15 text-[#b8c0ff] ring-1 ring-[#5865f2]/25">
           <Upload className="h-5 w-5" aria-hidden />
@@ -512,7 +577,7 @@ function StudentImportPanel({
       </div>
 
       <form onSubmit={onSubmit} className="grid gap-2 sm:grid-cols-[1fr_auto]">
-        <label className="flex min-h-11 cursor-pointer items-center rounded-md border border-dashed border-[#3f4147] bg-[#2b2d31] px-3 text-sm text-[#b5bac1] transition-colors hover:border-[#5865f2]/60 hover:text-[#f2f3f5]">
+        <label className="flex min-h-11 cursor-pointer items-center rounded-md border border-dashed border-[#3f4147] bg-[#2b2d31] px-3 text-sm text-[#b5bac1] transition-colors hover:border-[#5865f2]/60 hover:bg-[#32343a] hover:text-[#f2f3f5] focus-within:border-[#5865f2]/60 focus-within:ring-2 focus-within:ring-[#5865f2]/20">
           <input
             key={fileName || "empty-import-file"}
             type="file"
@@ -525,7 +590,7 @@ function StudentImportPanel({
         <button
           type="submit"
           disabled={loading || !fileName}
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-[#5865f2] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#4752c4] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#5865f2]"
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-md bg-[#5865f2] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#4752c4] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#b8c0ff]/80 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#5865f2]"
         >
           {loading ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -639,43 +704,6 @@ function StudentImportPanel({
   );
 }
 
-
-function StudentAttendanceCard({ attendance, loading, error }) {
-  const percentage = attendance?.attendancePercentage ?? 0;
-
-  return (
-    <section className="mx-2 mb-4 rounded-lg border border-[#1e1f22]/70 bg-[#313338] p-3 shadow-sm sm:mx-4 sm:p-4">
-      <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-[#23a559]/15 text-[#57f287] ring-1 ring-[#23a559]/25">
-          <Gauge className="h-5 w-5" aria-hidden />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[#949ba4]">
-            Attendance
-          </p>
-          {loading ? (
-            <div className="mt-2 h-7 w-24 animate-pulse rounded bg-[#404249]" />
-          ) : error ? (
-            <p className="mt-1 text-sm text-[#f23f42]">{error}</p>
-          ) : (
-            <p className="mt-0.5 text-3xl font-bold leading-none text-[#f2f3f5]">
-              {formatAttendance(percentage)}
-            </p>
-          )}
-        </div>
-      </div>
-      {!loading && !error && (
-        <div className="mt-3 h-2 overflow-hidden rounded-full bg-[#1e1f22]">
-          <div
-            className="h-full rounded-full bg-[#23a559]"
-            style={{ width: `${Math.min(Math.max(Number(percentage), 0), 100)}%` }}
-          />
-        </div>
-      )}
-    </section>
-  );
-}
-
 function AttendanceUpdatePanel({
   members,
   values,
@@ -685,7 +713,7 @@ function AttendanceUpdatePanel({
   onSubmit,
 }) {
   return (
-    <section className="mx-2 mb-4 rounded-lg border border-[#1e1f22]/70 bg-[#313338] p-3 shadow-sm sm:mx-4 sm:p-4">
+      <section className="mx-2 mb-4 rounded-lg border border-[#1e1f22]/70 bg-[#313338] p-3 shadow-sm ring-1 ring-white/[0.02] sm:mx-4 sm:p-4">
       <div className="mb-3 flex min-w-0 items-center gap-2">
         <Gauge className="h-5 w-5 shrink-0 text-[#57f287]" />
         <div className="min-w-0">
@@ -708,9 +736,9 @@ function AttendanceUpdatePanel({
       )}
 
       {members.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-[#3f4147] bg-[#2b2d31]/70 px-3 py-4 text-sm text-[#949ba4]">
-          No students available in this group.
-        </div>
+          <div className="rounded-lg border border-dashed border-[#3f4147] bg-[#2b2d31]/70 px-4 py-8 text-center text-sm text-[#949ba4]">
+            No students available in this group.
+          </div>
       ) : (
         <div className="grid gap-2">
           {members.map((member) => {
@@ -719,7 +747,7 @@ function AttendanceUpdatePanel({
               <form
                 key={member.id}
                 onSubmit={(e) => onSubmit(e, member.id)}
-                className="grid gap-2 rounded-lg border border-[#3f4147]/80 bg-[#2b2d31] p-3 sm:grid-cols-[minmax(0,1fr)_9rem_auto] sm:items-center"
+                className="grid gap-3 rounded-lg border border-[#3f4147]/80 bg-[#2b2d31] p-3 transition-colors hover:border-[#57f287]/35 hover:bg-[#32343a] sm:grid-cols-[minmax(0,1fr)_9rem_auto] sm:items-center"
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold text-[#f2f3f5]">
@@ -730,19 +758,20 @@ function AttendanceUpdatePanel({
                     {formatAttendance(member.attendancePercentage)}
                   </p>
                 </div>
-                <input
-                  type="number"
+                  <input
+                    type="number"
                   min="0"
                   max="100"
                   step="0.01"
                   value={values[member.id] ?? ""}
                   onChange={(e) => onValueChange(member.id, e.target.value)}
-                  className="h-10 w-full rounded-md border border-transparent bg-[#1e1f22] px-3 text-sm text-[#f2f3f5] placeholder:text-[#6d6f78] outline-none transition-all focus:border-[#57f287]/60 focus:ring-2 focus:ring-[#57f287]/20"
+                    aria-label={`Attendance percentage for ${member.name}`}
+                    className="h-10 w-full rounded-md border border-transparent bg-[#1e1f22] px-3 text-sm text-[#f2f3f5] placeholder:text-[#6d6f78] outline-none transition-all focus:border-[#57f287]/60 focus:ring-2 focus:ring-[#57f287]/20"
                 />
                 <button
                   type="submit"
                   disabled={saving || values[member.id] === ""}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#23a559] px-3 text-sm font-semibold text-white transition-colors hover:bg-[#1f8f4d] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#23a559]"
+                    className="inline-flex h-10 items-center justify-center gap-2 rounded-md bg-[#23a559] px-3 text-sm font-semibold text-white transition-colors hover:bg-[#1f8f4d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#57f287]/70 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#23a559]"
                 >
                   {saving ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -754,114 +783,6 @@ function AttendanceUpdatePanel({
               </form>
             );
           })}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function AnnouncementsSection({
-  announcements,
-  loading,
-  error,
-  canCreate,
-  title,
-  content,
-  createLoading,
-  createError,
-  onTitleChange,
-  onContentChange,
-  onSubmit,
-}) {
-  return (
-    <section className="mx-2 mb-4 rounded-lg border border-[#1e1f22]/70 bg-[#313338] p-3 shadow-sm sm:mx-4 sm:p-4">
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <Megaphone className="h-5 w-5 shrink-0 text-[#faa61a]" />
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold text-[#f2f3f5]">
-              Announcements
-            </h2>
-            <p className="truncate text-xs text-[#949ba4]">
-              {announcements.length} posted
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {canCreate && (
-        <form
-          onSubmit={onSubmit}
-          className="mb-3 rounded-lg border border-[#3f4147]/70 bg-[#2b2d31] p-3"
-        >
-          <div className="grid gap-2">
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => onTitleChange(e.target.value)}
-              placeholder="Announcement title"
-              maxLength={140}
-              className="w-full rounded-md border border-transparent bg-[#1e1f22] px-3 py-2 text-sm text-[#f2f3f5] placeholder:text-[#6d6f78] outline-none transition-all focus:border-[#faa61a]/60 focus:ring-2 focus:ring-[#faa61a]/20"
-            />
-            <textarea
-              value={content}
-              onChange={(e) => onContentChange(e.target.value)}
-              placeholder="Share an update with this group"
-              rows={3}
-              className="max-h-36 min-h-20 w-full resize-y rounded-md border border-transparent bg-[#1e1f22] px-3 py-2 text-sm text-[#f2f3f5] placeholder:text-[#6d6f78] outline-none transition-all focus:border-[#faa61a]/60 focus:ring-2 focus:ring-[#faa61a]/20"
-            />
-          </div>
-
-          {createError && (
-            <p
-              role="alert"
-              className="mt-2 rounded-md border border-[#ed4245]/30 bg-[#ed4245]/10 px-3 py-2 text-xs text-[#f23f42]"
-            >
-              {createError}
-            </p>
-          )}
-
-          <div className="mt-3 flex justify-end">
-            <button
-              type="submit"
-              disabled={createLoading || !title.trim() || !content.trim()}
-              className="inline-flex items-center gap-2 rounded-md bg-[#faa61a] px-3 py-2 text-sm font-semibold text-[#1e1f22] transition-colors hover:bg-[#e99a18] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#faa61a]"
-            >
-              {createLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Megaphone className="h-4 w-4" />
-              )}
-              Post
-            </button>
-          </div>
-        </form>
-      )}
-
-      {loading ? (
-        <div className="flex items-center gap-2 rounded-lg bg-[#2b2d31] px-3 py-3 text-sm text-[#949ba4]">
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-          Loading announcements...
-        </div>
-      ) : error ? (
-        <p
-          role="alert"
-          className="rounded-lg border border-[#ed4245]/30 bg-[#ed4245]/10 px-3 py-3 text-sm text-[#f23f42]"
-        >
-          {error}
-        </p>
-      ) : announcements.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-[#3f4147] bg-[#2b2d31]/70 px-3 py-4 text-sm text-[#949ba4]">
-          No announcements yet.
-        </div>
-      ) : (
-        <div className="grid gap-2">
-          {announcements.map((announcement) => (
-            <AnnouncementCard
-              key={announcement.id}
-              announcement={announcement}
-            />
-          ))}
         </div>
       )}
     </section>
@@ -1445,6 +1366,8 @@ function ChatPage() {
     [groups, selectedGroupId]
   );
 
+  const panelTitle = PANEL_TITLES[activePanel] ?? "Chat";
+
   const filteredGroups = useMemo(() => {
     const q = groupSearch.trim().toLowerCase();
     if (!q) return groups;
@@ -1846,7 +1769,7 @@ function ChatPage() {
         <button
           type="button"
           aria-label="Close sidebar"
-          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[2px] md:hidden"
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[2px] transition-opacity md:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -1856,18 +1779,18 @@ function ChatPage() {
         id="groups-sidebar"
         aria-label="Groups"
         aria-hidden={isMobileLayout ? !sidebarOpen : false}
-        className={`fixed inset-y-0 left-0 z-50 flex w-[min(100vw,280px)] max-w-full flex-col border-r border-[#1e1f22]/80 bg-[#2b2d31] transition-transform duration-300 ease-out max-md:shadow-2xl md:static md:z-auto md:w-60 md:max-w-none md:translate-x-0 md:shadow-none ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-[min(100vw,288px)] max-w-full flex-col border-r border-[#1e1f22]/80 bg-[#2b2d31] transition-transform duration-300 ease-out will-change-transform max-md:shadow-2xl md:static md:z-auto md:w-64 md:max-w-none md:translate-x-0 md:shadow-none ${
           sidebarOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"
         }`}
       >
         <div className="flex h-12 shrink-0 items-center justify-between border-b border-[#1e1f22]/60 px-4 shadow-sm">
-          <h2 className="truncate text-sm font-semibold tracking-tight">
+          <h2 className="truncate text-sm font-semibold tracking-tight text-white">
             CampusConnect
           </h2>
           <button
             type="button"
             aria-label="Close groups"
-            className="rounded-md p-1.5 text-[#b5bac1] transition-colors hover:bg-[#3f4147] hover:text-[#f2f3f5] md:hidden"
+            className="rounded-md p-1.5 text-[#b5bac1] transition-colors hover:bg-[#3f4147] hover:text-[#f2f3f5] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5865f2]/60 md:hidden"
             onClick={() => setSidebarOpen(false)}
           >
             <X className="h-5 w-5" />
@@ -1882,6 +1805,7 @@ function ChatPage() {
               placeholder="Search groups"
               value={groupSearch}
               onChange={(e) => setGroupSearch(e.target.value)}
+              aria-label="Search groups"
               className="w-full rounded-md border border-transparent bg-[#1e1f22] py-2 pl-9 pr-3 text-sm text-[#f2f3f5] placeholder:text-[#6d6f78] outline-none transition-all duration-200 hover:bg-[#232428] focus:border-[#5865f2]/50 focus:ring-2 focus:ring-[#5865f2]/25"
             />
           </div>
@@ -1893,11 +1817,15 @@ function ChatPage() {
           </p>
         </div>
 
-        <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 pb-2">
+        <nav className="flex-1 space-y-1 overflow-y-auto px-2 pb-2" aria-label="Group and panel navigation">
           {groupsLoading ? (
-            <div className="flex flex-col items-center justify-center gap-2 px-4 py-10">
-              <Loader2 className="h-6 w-6 animate-spin text-[#5865f2]" aria-hidden />
-              <p className="text-sm text-[#949ba4]">Loading groups…</p>
+            <div className="space-y-2 px-1 py-2" aria-label="Loading groups">
+              {[0, 1, 2, 3].map((item) => (
+                <div
+                  key={item}
+                  className="h-10 animate-pulse rounded-md bg-[#35373c]"
+                />
+              ))}
             </div>
           ) : groupsError ? (
             <p
@@ -1916,10 +1844,10 @@ function ChatPage() {
                     type="button"
                     onClick={() => selectGroup(group.id)}
                     aria-current={active ? "true" : undefined}
-                    className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[15px] transition-all duration-150 ${
+                    className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[15px] transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5865f2]/60 ${
                       active
-                        ? "bg-[#404249] text-white shadow-sm ring-1 ring-[#5865f2]/20"
-                        : "text-[#b5bac1] hover:bg-[#35373c] hover:text-[#dbdee1]"
+                        ? "bg-[#404249] text-white shadow-sm ring-1 ring-[#5865f2]/30"
+                        : "text-[#b5bac1] hover:bg-[#35373c] hover:text-[#dbdee1] hover:translate-x-0.5"
                     }`}
                   >
                     <Hash
@@ -1929,42 +1857,40 @@ function ChatPage() {
                   </button>
                 );
               })}
-              <div className="mt-4 border-t border-[#3f4147] pt-4">
-  <button
-    onClick={() => setActivePanel("chat")}
-    className="mb-2 block w-full rounded px-3 py-2 text-left text-[#dbdee1] hover:bg-[#404249]"
-  >
-    💬 Chat
-  </button>
-
-  <button
-    onClick={() => setActivePanel("announcements")}
-    className="mb-2 block w-full rounded px-3 py-2 text-left text-[#dbdee1] hover:bg-[#404249]"
-  >
-    📢 Announcements
-  </button>
-
-  <button
-    onClick={() => setActivePanel("files")}
-    className="mb-2 block w-full rounded px-3 py-2 text-left text-[#dbdee1] hover:bg-[#404249]"
-  >
-    📁 Files
-  </button>
-
-  <button
-    onClick={() => setActivePanel("attendance")}
-    className="mb-2 block w-full rounded px-3 py-2 text-left text-[#dbdee1] hover:bg-[#404249]"
-  >
-    📊 Attendance
-  </button>
-
-  <button
-    onClick={() => setActivePanel("settings")}
-    className="block w-full rounded px-3 py-2 text-left text-[#dbdee1] hover:bg-[#404249]"
-  >
-    ⚙ Settings
-  </button>
-</div>
+              <div className="mt-4 border-t border-[#3f4147]/80 pt-3">
+                <p className="mb-1 px-1 text-[11px] font-semibold uppercase tracking-wide text-[#949ba4]">
+                  Panels
+                </p>
+                <div className="space-y-1">
+                  {PANEL_NAV_ITEMS.map(({ id, label, icon: Icon }) => {
+                    const active = activePanel === id;
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => {
+                          setActivePanel(id);
+                          setSidebarOpen(false);
+                        }}
+                        aria-current={active ? "page" : undefined}
+                        className={`flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm font-medium transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5865f2]/60 ${
+                          active
+                            ? "bg-[#5865f2]/20 text-white ring-1 ring-[#5865f2]/35"
+                            : "text-[#b5bac1] hover:translate-x-0.5 hover:bg-[#35373c] hover:text-[#f2f3f5]"
+                        }`}
+                      >
+                        <Icon
+                          className={`h-[18px] w-[18px] shrink-0 ${
+                            active ? "text-[#b8c0ff]" : "text-[#949ba4]"
+                          }`}
+                          aria-hidden
+                        />
+                        <span className="truncate">{label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               {filteredGroups.length === 0 && (
                 <p className="px-2 py-4 text-center text-sm text-[#949ba4]">
                   {groups.length === 0
@@ -2006,22 +1932,30 @@ function ChatPage() {
       {/* Main chat — full width on mobile */}
       <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col">
         {/* Header */}
-        <header className="flex h-12 shrink-0 items-center gap-1.5 border-b border-[#1e1f22]/50 bg-[#313338] px-2 shadow-sm sm:gap-2 sm:px-3 md:px-4">
+        <header className="flex h-14 shrink-0 items-center gap-2 border-b border-[#1e1f22]/50 bg-[#313338]/95 px-2 shadow-sm sm:px-3 md:px-4">
           <button
             type="button"
             aria-label="Open groups menu"
             aria-expanded={sidebarOpen}
             aria-controls="groups-sidebar"
-            className="-ml-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-[#b5bac1] transition-colors hover:bg-[#404249] hover:text-[#f2f3f5] active:bg-[#404249] md:hidden"
+            className="-ml-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-[#b5bac1] transition-colors hover:bg-[#404249] hover:text-[#f2f3f5] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5865f2]/60 active:bg-[#404249] md:hidden"
             onClick={() => setSidebarOpen(true)}
           >
             <Menu className="h-5 w-5" />
           </button>
 
-          <Hash className="hidden h-6 w-6 shrink-0 text-[#949ba4] sm:block" />
+          {activePanel === "chat" ? (
+            <Hash className="hidden h-5 w-5 shrink-0 text-[#949ba4] sm:block" />
+          ) : (
+            (() => {
+              const item = PANEL_NAV_ITEMS.find((entry) => entry.id === activePanel);
+              const Icon = item?.icon ?? Hash;
+              return (
+                <Icon className="hidden h-5 w-5 shrink-0 text-[#949ba4] sm:block" />
+              );
+            })()
+          )}
           <div className="min-w-0 flex-1">
-          {activePanel === "chat" && (
-            <>
             {groupsLoading ? (
               <>
                 <div className="h-4 w-32 animate-pulse rounded bg-[#404249]" />
@@ -2030,28 +1964,26 @@ function ChatPage() {
             ) : selectedGroup ? (
               <>
                 <h1 className="truncate text-sm font-semibold sm:text-base">
-                  {selectedGroup.name}
+                  {panelTitle}
                 </h1>
                 <p className="truncate text-[11px] text-[#949ba4] sm:text-xs">
-                  <span className="sm:hidden">
-                    {selectedGroup.branch}
-                  </span>
+                  <span className="sm:hidden">{selectedGroup.name}</span>
                   <span className="hidden sm:inline">
-                    {selectedGroup.branch} · Year {selectedGroup.year}
+                    {activePanel === "chat"
+                      ? `${selectedGroup.name} · ${selectedGroup.branch} · Year ${selectedGroup.year}`
+                      : selectedGroup.name}
                   </span>
                 </p>
               </>
             ) : (
               <>
                 <h1 className="truncate text-base font-semibold text-[#949ba4]">
-                  Select a group
+                  {panelTitle}
                 </h1>
                 <p className="truncate text-xs text-[#6d6f78]">
                   Choose a channel from the sidebar
                 </p>
               </>
-            )}
-            </>
             )}
           </div>
 
@@ -2061,7 +1993,7 @@ function ChatPage() {
               aria-label="Members"
               aria-expanded={membersOpen}
               onClick={() => setMembersOpen((open) => !open)}
-              className={`flex h-10 w-10 items-center justify-center rounded-md transition-colors hover:bg-[#404249] hover:text-[#f2f3f5] sm:h-auto sm:w-auto sm:p-2 ${
+              className={`flex h-10 w-10 items-center justify-center rounded-md transition-colors hover:bg-[#404249] hover:text-[#f2f3f5] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5865f2]/60 sm:h-auto sm:w-auto sm:p-2 ${
                 membersOpen
                   ? "bg-[#404249] text-[#f2f3f5]"
                   : "text-[#b5bac1]"
@@ -2072,21 +2004,21 @@ function ChatPage() {
             <button
               type="button"
               aria-label="Pinned messages"
-              className="hidden rounded-md p-2 text-[#b5bac1] transition-colors hover:bg-[#404249] hover:text-[#f2f3f5] sm:block"
+              className="hidden rounded-md p-2 text-[#b5bac1] transition-colors hover:bg-[#404249] hover:text-[#f2f3f5] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5865f2]/60 sm:block"
             >
               <Pin className="h-5 w-5" />
             </button>
             <button
               type="button"
               aria-label="Notifications"
-              className="hidden rounded-md p-2 text-[#b5bac1] transition-colors hover:bg-[#404249] hover:text-[#f2f3f5] lg:block"
+              className="hidden rounded-md p-2 text-[#b5bac1] transition-colors hover:bg-[#404249] hover:text-[#f2f3f5] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5865f2]/60 lg:block"
             >
               <Bell className="h-5 w-5" />
             </button>
             <button
               type="button"
               aria-label="More options"
-              className="hidden h-10 w-10 items-center justify-center rounded-md text-[#b5bac1] transition-colors hover:bg-[#404249] hover:text-[#f2f3f5] max-sm:flex sm:p-2"
+              className="hidden h-10 w-10 items-center justify-center rounded-md text-[#b5bac1] transition-colors hover:bg-[#404249] hover:text-[#f2f3f5] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5865f2]/60 max-sm:flex sm:p-2"
             >
               <MoreVertical className="h-5 w-5" />
             </button>
@@ -2184,6 +2116,16 @@ function ChatPage() {
                     onSubmit={handleAttendanceSubmit}
                   />
                 )}
+                {activePanel === "attendance" &&
+                  !canImportStudentsUi &&
+                  !showStudentAttendance &&
+                  !canEditAttendance && (
+                    <EmptyState
+                      icon={Gauge}
+                      title="Attendance is not available"
+                      description="There are no attendance controls for this account in the selected group."
+                    />
+                  )}
               </>
             )}
             {!groupsLoading && selectedGroup && (
@@ -2225,37 +2167,19 @@ function ChatPage() {
             {activePanel === "chat" && (
   <>
     {groupsLoading ? (
-              <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-                <Loader2
-                  className="mb-4 h-10 w-10 animate-spin text-[#5865f2]"
-                  aria-hidden
-                />
-                <p className="text-sm text-[#949ba4]">Loading channel…</p>
-              </div>
+              <ChatSkeleton />
             ) : !selectedGroup ? (
-              <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#404249]">
-                  <Hash className="h-8 w-8 text-[#949ba4]" />
-                </div>
-                <h2 className="text-xl font-bold text-[#f2f3f5]">
-                  No group selected
-                </h2>
-                <p className="mt-2 max-w-sm text-sm text-[#b5bac1]">
-                  Pick a group from the sidebar to start chatting.
-                </p>
-              </div>
+              <EmptyState
+                icon={Hash}
+                title="No group selected"
+                description="Pick a group from the sidebar to start chatting."
+              />
             ) : messages.length === 0 ? (
-              <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#404249]">
-                  <Hash className="h-8 w-8 text-[#949ba4]" />
-                </div>
-                <h2 className="text-xl font-bold text-[#f2f3f5]">
-                  Welcome to #{selectedGroup.name}
-                </h2>
-                <p className="mt-2 max-w-sm text-sm text-[#b5bac1]">
-                  This is the start of the channel. Say hello to your classmates.
-                </p>
-              </div>
+              <EmptyState
+                icon={Hash}
+                title={`Welcome to #${selectedGroup.name}`}
+                description="This is the start of the channel. Say hello to your classmates."
+              />
             ) : (
               <>
                 {messages.map((msg, index) => {
@@ -2295,13 +2219,18 @@ function ChatPage() {
         {/* Input */}
         <div className="shrink-0 px-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1 sm:px-3 sm:pb-4 md:px-4">
           {typingLabel && (
-            <p
-              className="mb-1.5 truncate px-1 text-xs italic text-[#949ba4] md:mx-auto md:max-w-4xl"
+            <div
+              className="mb-1.5 flex items-center gap-2 truncate px-1 text-xs text-[#949ba4] md:mx-auto md:max-w-4xl"
               role="status"
               aria-live="polite"
             >
-              {typingLabel}
-            </p>
+              <span className="flex gap-0.5" aria-hidden>
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#949ba4]" />
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#949ba4] [animation-delay:120ms]" />
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#949ba4] [animation-delay:240ms]" />
+              </span>
+              <span className="truncate italic">{typingLabel}</span>
+            </div>
           )}
           {fileUploadError && (
             <p
@@ -2328,7 +2257,7 @@ function ChatPage() {
               aria-label="Attach file"
               disabled={!selectedGroup || groupsLoading || fileUploadLoading}
               onClick={openFilePicker}
-              className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-[#b5bac1] transition-colors hover:text-[#f2f3f5] disabled:cursor-not-allowed disabled:opacity-40 sm:h-auto sm:w-auto sm:p-2"
+              className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-[#b5bac1] transition-colors hover:bg-[#404249] hover:text-[#f2f3f5] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5865f2]/60 disabled:cursor-not-allowed disabled:opacity-40 sm:h-auto sm:w-auto sm:p-2"
             >
               {fileUploadLoading ? (
                 <Loader2 className="h-5 w-5 animate-spin" />
@@ -2362,7 +2291,7 @@ function ChatPage() {
               aria-haspopup="dialog"
               disabled={!selectedGroup || groupsLoading}
               onClick={toggleEmojiPicker}
-              className={`mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-[#b5bac1] transition-colors hover:text-[#f2f3f5] disabled:cursor-not-allowed disabled:opacity-40 sm:h-auto sm:w-auto sm:p-2 ${
+              className={`mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-[#b5bac1] transition-colors hover:bg-[#404249] hover:text-[#f2f3f5] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5865f2]/60 disabled:cursor-not-allowed disabled:opacity-40 sm:h-auto sm:w-auto sm:p-2 ${
                 emojiPickerOpen ? "bg-[#404249] text-[#f2f3f5]" : ""
               }`}
             >
@@ -2373,7 +2302,7 @@ function ChatPage() {
               type="submit"
               disabled={!newMessage.trim() || !selectedGroup || groupsLoading}
               aria-label="Send message"
-              className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#5865f2] text-white transition-all duration-200 hover:bg-[#4752c4] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-[#5865f2] sm:h-auto sm:w-auto sm:p-2"
+              className="mb-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#5865f2] text-white transition-all duration-200 hover:bg-[#4752c4] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#b8c0ff]/80 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-[#5865f2] sm:h-auto sm:w-auto sm:p-2"
             >
               <Send className="h-5 w-5" />
             </button>

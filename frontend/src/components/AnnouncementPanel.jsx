@@ -48,10 +48,12 @@ function AnnouncementCard({
   }, [menuOpen, confirmOpen]);
 
   useEffect(() => {
-    if (!canDelete) {
+    if (canDelete) return undefined;
+    const timer = window.setTimeout(() => {
       setMenuOpen(false);
       setConfirmOpen(false);
-    }
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [canDelete]);
 
   function handleMenuToggle(event) {
@@ -80,7 +82,7 @@ function AnnouncementCard({
 
   return (
     <article
-      className={`group relative rounded-lg border border-[#3f4147]/80 bg-[#2b2d31] p-3 transition-opacity ${
+      className={`group relative rounded-lg border border-[#3f4147]/80 bg-[#2b2d31] p-3 shadow-sm transition-all hover:border-[#faa61a]/35 hover:bg-[#32343a] ${
         isDeleting ? "opacity-60" : ""
       }`}
     >
@@ -144,17 +146,17 @@ function AnnouncementCard({
                       for everyone in this group.
                     </p>
                     <div className="mt-3 flex justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={handleConfirmCancel}
-                        className="rounded-md px-2.5 py-1.5 text-xs font-medium text-[#dbdee1] transition-colors hover:bg-[#404249] hover:text-[#f2f3f5]"
+                    <button
+                      type="button"
+                      onClick={handleConfirmCancel}
+                        className="rounded-md px-2.5 py-1.5 text-xs font-medium text-[#dbdee1] transition-colors hover:bg-[#404249] hover:text-[#f2f3f5] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5865f2]/60"
                       >
                         Cancel
                       </button>
                       <button
                         type="button"
                         onClick={handleConfirmDelete}
-                        className="rounded-md bg-[#da373c] px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#a12828]"
+                        className="rounded-md bg-[#da373c] px-2.5 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#a12828] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#f23f42]/70"
                       >
                         Delete
                       </button>
@@ -206,7 +208,7 @@ export default function AnnouncementPanel({
   onDeleteAnnouncement,
 }) {
   return (
-    <section className="mx-2 mb-4 rounded-lg border border-[#1e1f22]/70 bg-[#313338] p-3 shadow-sm sm:mx-4 sm:p-4">
+    <section className="mx-2 mb-4 rounded-lg border border-[#1e1f22]/70 bg-[#313338] p-3 shadow-sm ring-1 ring-white/[0.02] sm:mx-4 sm:p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Megaphone className="h-5 w-5 shrink-0 text-[#faa61a]" />
@@ -224,7 +226,7 @@ export default function AnnouncementPanel({
       {canCreate && (
         <form
           onSubmit={onSubmit}
-          className="mb-3 rounded-lg border border-[#3f4147]/70 bg-[#2b2d31] p-3"
+          className="mb-3 rounded-lg border border-[#3f4147]/70 bg-[#2b2d31] p-3 shadow-sm"
         >
           <div className="grid gap-2">
             <input
@@ -233,14 +235,16 @@ export default function AnnouncementPanel({
               onChange={(e) => onTitleChange(e.target.value)}
               placeholder="Announcement title"
               maxLength={140}
-              className="w-full rounded-md border border-transparent bg-[#1e1f22] px-3 py-2 text-sm text-[#f2f3f5] placeholder:text-[#6d6f78] outline-none transition-all focus:border-[#faa61a]/60 focus:ring-2 focus:ring-[#faa61a]/20"
+              aria-label="Announcement title"
+              className="w-full rounded-md border border-transparent bg-[#1e1f22] px-3 py-2 text-sm text-[#f2f3f5] placeholder:text-[#6d6f78] outline-none transition-all hover:bg-[#232428] focus:border-[#faa61a]/60 focus:ring-2 focus:ring-[#faa61a]/20"
             />
             <textarea
               value={content}
               onChange={(e) => onContentChange(e.target.value)}
               placeholder="Share an update with this group"
               rows={3}
-              className="max-h-36 min-h-20 w-full resize-y rounded-md border border-transparent bg-[#1e1f22] px-3 py-2 text-sm text-[#f2f3f5] placeholder:text-[#6d6f78] outline-none transition-all focus:border-[#faa61a]/60 focus:ring-2 focus:ring-[#faa61a]/20"
+              aria-label="Announcement content"
+              className="max-h-36 min-h-20 w-full resize-y rounded-md border border-transparent bg-[#1e1f22] px-3 py-2 text-sm text-[#f2f3f5] placeholder:text-[#6d6f78] outline-none transition-all hover:bg-[#232428] focus:border-[#faa61a]/60 focus:ring-2 focus:ring-[#faa61a]/20"
             />
           </div>
 
@@ -257,7 +261,7 @@ export default function AnnouncementPanel({
             <button
               type="submit"
               disabled={createLoading || !title.trim() || !content.trim()}
-              className="inline-flex items-center gap-2 rounded-md bg-[#faa61a] px-3 py-2 text-sm font-semibold text-[#1e1f22] transition-colors hover:bg-[#e99a18] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#faa61a]"
+              className="inline-flex items-center gap-2 rounded-md bg-[#faa61a] px-3 py-2 text-sm font-semibold text-[#1e1f22] transition-colors hover:bg-[#e99a18] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#faa61a]/70 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-[#faa61a]"
             >
               {createLoading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -271,9 +275,17 @@ export default function AnnouncementPanel({
       )}
 
       {loading ? (
-        <div className="flex items-center gap-2 rounded-lg bg-[#2b2d31] px-3 py-3 text-sm text-[#949ba4]">
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-          Loading announcements...
+        <div className="grid gap-2" aria-label="Loading announcements">
+          {[0, 1, 2].map((item) => (
+            <div
+              key={item}
+              className="rounded-lg border border-[#3f4147]/70 bg-[#2b2d31] p-3"
+            >
+              <div className="h-4 w-2/5 animate-pulse rounded bg-[#404249]" />
+              <div className="mt-3 h-3 w-full animate-pulse rounded bg-[#404249]/80" />
+              <div className="mt-2 h-3 w-2/3 animate-pulse rounded bg-[#404249]/60" />
+            </div>
+          ))}
         </div>
       ) : error ? (
         <p
@@ -283,7 +295,8 @@ export default function AnnouncementPanel({
           {error}
         </p>
       ) : announcements.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-[#3f4147] bg-[#2b2d31]/70 px-3 py-4 text-sm text-[#949ba4]">
+        <div className="rounded-lg border border-dashed border-[#3f4147] bg-[#2b2d31]/70 px-4 py-10 text-center text-sm text-[#949ba4]">
+          <Megaphone className="mx-auto mb-3 h-8 w-8 text-[#faa61a]/80" aria-hidden />
           No announcements yet.
         </div>
       ) : (
