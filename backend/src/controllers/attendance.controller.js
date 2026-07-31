@@ -1,5 +1,5 @@
 const prisma = require("../config/prisma");
-const { canUpdateAttendance } = require("../utils/permissions");
+const { canUpdateAttendance, isAdmin } = require("../utils/permissions");
 
 function parseUserId(rawUserId) {
   const userId = Number(rawUserId);
@@ -50,10 +50,10 @@ const getMyAttendance = async (req, res) => {
       data: user,
     });
   } catch (error) {
+    console.error("Failed to fetch attendance:", error.message);
     return res.status(500).json({
       success: false,
       message: "Failed to fetch attendance.",
-      error: error.message,
     });
   }
 };
@@ -87,7 +87,15 @@ const updateAttendance = async (req, res) => {
 
     const existingUser = await prisma.user.findUnique({
       where: { id: userId },
-      select: { id: true },
+      select: {
+        id: true,
+        role: true,
+        groups: {
+          select: {
+            groupId: true,
+          },
+        },
+      },
     });
 
     if (!existingUser) {
@@ -95,6 +103,32 @@ const updateAttendance = async (req, res) => {
         success: false,
         message: "User not found.",
       });
+    }
+
+    if (existingUser.role !== "STUDENT") {
+      return res.status(403).json({
+        success: false,
+        message: "Attendance can only be updated for student accounts.",
+      });
+    }
+
+    if (!isAdmin(req.user?.role)) {
+      const updaterMembership = await prisma.groupMember.findFirst({
+        where: {
+          userId: req.user.id,
+          groupId: {
+            in: existingUser.groups.map((membership) => membership.groupId),
+          },
+        },
+        select: { id: true },
+      });
+
+      if (!updaterMembership) {
+        return res.status(403).json({
+          success: false,
+          message: "You can only update attendance for students in your groups.",
+        });
+      }
     }
 
     const user = await prisma.user.update({
@@ -115,10 +149,10 @@ const updateAttendance = async (req, res) => {
       data: user,
     });
   } catch (error) {
+    console.error("Failed to update attendance:", error.message);
     return res.status(500).json({
       success: false,
       message: "Failed to update attendance.",
-      error: error.message,
     });
   }
 };

@@ -4,49 +4,11 @@ const {
   canDeleteAnnouncement,
   canAccessGroup,
 } = require("../utils/permissions");
-
-function parsePositiveInt(raw) {
-  if (raw === undefined || raw === null || raw === "") {
-    return null;
-  }
-
-  const value = Number(raw);
-  return Number.isInteger(value) && value > 0 ? value : null;
-}
+const { getUserGroupAccess } = require("../utils/groupAccess");
+const { clampString, parsePositiveInt } = require("../utils/requestValidation");
 
 function parseGroupId(rawGroupId) {
   return parsePositiveInt(rawGroupId);
-}
-
-async function getUserAccess(userId, groupId) {
-  const [user, group, membership] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        name: true,
-        rollNo: true,
-        role: true,
-      },
-    }),
-    prisma.group.findUnique({
-      where: { id: groupId },
-      select: { id: true },
-    }),
-    prisma.groupMember.findFirst({
-      where: {
-        userId,
-        groupId,
-      },
-      select: { id: true },
-    }),
-  ]);
-
-  return {
-    user,
-    group,
-    isGroupMember: Boolean(membership),
-  };
 }
 
 const createAnnouncement = async (req, res) => {
@@ -70,8 +32,8 @@ const createAnnouncement = async (req, res) => {
       });
     }
 
-    const cleanTitle = typeof title === "string" ? title.trim() : "";
-    const cleanContent = typeof content === "string" ? content.trim() : "";
+    const cleanTitle = clampString(title, 140);
+    const cleanContent = clampString(content, 4000);
 
     if (!cleanTitle || !cleanContent) {
       return res.status(400).json({
@@ -80,7 +42,8 @@ const createAnnouncement = async (req, res) => {
       });
     }
 
-    const { user, group, isGroupMember } = await getUserAccess(userId, groupId);
+    const access = await getUserGroupAccess(userId, groupId);
+    const { user, group, isGroupMember } = access;
 
     if (!user) {
       return res.status(401).json({
@@ -135,10 +98,10 @@ const createAnnouncement = async (req, res) => {
       data: announcement,
     });
   } catch (error) {
+    console.error("Failed to create announcement:", error.message);
     return res.status(500).json({
       success: false,
       message: "Failed to create announcement.",
-      error: error.message,
     });
   }
 };
@@ -163,7 +126,8 @@ const getGroupAnnouncements = async (req, res) => {
       });
     }
 
-    const { user, group, isGroupMember } = await getUserAccess(userId, groupId);
+    const access = await getUserGroupAccess(userId, groupId);
+    const { user, group, isGroupMember } = access;
 
     if (!user) {
       return res.status(401).json({
@@ -209,10 +173,10 @@ const getGroupAnnouncements = async (req, res) => {
       data: announcements,
     });
   } catch (error) {
+    console.error("Failed to fetch announcements:", error.message);
     return res.status(500).json({
       success: false,
       message: "Failed to fetch announcements.",
-      error: error.message,
     });
   }
 };
@@ -249,6 +213,14 @@ const deleteAnnouncement = async (req, res) => {
       });
     }
 
+    const access = await getUserGroupAccess(userId, announcement.groupId);
+    if (!access.user || !access.canAccess) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not a member of this group.",
+      });
+    }
+
     if (!canDeleteAnnouncement({ id: userId, role }, announcement)) {
       return res.status(403).json({
         success: false,
@@ -277,10 +249,10 @@ const deleteAnnouncement = async (req, res) => {
       },
     });
   } catch (error) {
+    console.error("Failed to delete announcement:", error.message);
     return res.status(500).json({
       success: false,
       message: "Failed to delete announcement.",
-      error: error.message,
     });
   }
 };

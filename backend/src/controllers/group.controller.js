@@ -1,9 +1,22 @@
 const prisma = require("../config/prisma");
 const { normalizeBranch, normalizeYear } = require("../utils/groupMatching");
-const { canViewMemberAttendance } = require("../utils/permissions");
+const {
+  canAccessGroup,
+  canViewMemberAttendance,
+  isAdmin,
+  isStaff,
+} = require("../utils/permissions");
+const { getUserGroupAccess } = require("../utils/groupAccess");
 
 const createGroup = async (req, res) => {
   try {
+    if (!isAdmin(req.user?.role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Only admins can create groups.",
+      });
+    }
+
     const { name, branch, year } = req.body;
 
     const normalizedBranch = normalizeBranch(branch);
@@ -30,16 +43,23 @@ const createGroup = async (req, res) => {
       data: group,
     });
   } catch (error) {
+    console.error("Failed to create group:", error.message);
     return res.status(500).json({
       success: false,
       message: "Failed to create group.",
-      error: error.message,
     });
   }
 };
 
 const getAllGroups = async (req, res) => {
   try {
+    if (!isStaff(req.user?.role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Only staff can view all groups.",
+      });
+    }
+
     const groups = await prisma.group.findMany({
       orderBy: {
         createdAt: "desc",
@@ -52,10 +72,10 @@ const getAllGroups = async (req, res) => {
       data: groups,
     });
   } catch (error) {
+    console.error("Failed to fetch groups:", error.message);
     return res.status(500).json({
       success: false,
       message: "Failed to fetch groups.",
-      error: error.message,
     });
   }
 };
@@ -83,10 +103,10 @@ const getMyGroups = async (req, res) => {
       data: groups,
     });
   } catch (error) {
+    console.error("Failed to fetch your groups:", error.message);
     return res.status(500).json({
       success: false,
       message: "Failed to fetch your groups.",
-      error: error.message,
     });
   }
 };
@@ -131,6 +151,35 @@ const joinGroup = async (req, res) => {
       });
     }
 
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        role: true,
+        branch: true,
+        year: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Authenticated user no longer exists.",
+      });
+    }
+
+    if (
+      !isAdmin(user.role) &&
+      (user.role !== "STUDENT" ||
+        normalizeBranch(user.branch) !== normalizeBranch(group.branch) ||
+        normalizeYear(user.year) !== normalizeYear(group.year))
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You do not have permission to join this group.",
+      });
+    }
+
     const existingMembership = await prisma.groupMember.findFirst({
       where: {
         userId,
@@ -169,10 +218,10 @@ const joinGroup = async (req, res) => {
       data: membership,
     });
   } catch (error) {
+    console.error("Failed to join group:", error.message);
     return res.status(500).json({
       success: false,
       message: "Failed to join group.",
-      error: error.message,
     });
   }
 };
@@ -189,14 +238,26 @@ const getGroupMembers = async (req, res) => {
       });
     }
 
-    const group = await prisma.group.findUnique({
-      where: { id: groupId },
-    });
+    const access = await getUserGroupAccess(req.user?.id, groupId);
 
-    if (!group) {
+    if (!access.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Authenticated user no longer exists.",
+      });
+    }
+
+    if (!access.group) {
       return res.status(404).json({
         success: false,
         message: "Group not found.",
+      });
+    }
+
+    if (!canAccessGroup(access.user, access.isGroupMember)) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not a member of this group.",
       });
     }
 
@@ -224,10 +285,10 @@ const getGroupMembers = async (req, res) => {
       data: memberships.map((m) => m.user),
     });
   } catch (error) {
+    console.error("Failed to fetch group members:", error.message);
     return res.status(500).json({
       success: false,
       message: "Failed to fetch group members.",
-      error: error.message,
     });
   }
 };

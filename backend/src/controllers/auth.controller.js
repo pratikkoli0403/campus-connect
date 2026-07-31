@@ -6,6 +6,7 @@ const {
   normalizeBranch,
   normalizeYear,
 } = require("../utils/groupMatching");
+const { clampString } = require("../utils/requestValidation");
 
 const registerUser = async (req, res) => {
   try {
@@ -18,8 +19,26 @@ const registerUser = async (req, res) => {
       });
     }
 
+    if (role !== "STUDENT") {
+      return res.status(403).json({
+        success: false,
+        message: "Public registration is limited to student accounts.",
+      });
+    }
+
+    const cleanName = clampString(name, 120);
+    const cleanRollNo = clampString(rollNo, 80);
+
+    if (!cleanName || !cleanRollNo || String(password).length < 6) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Name, roll number, and a password of at least 6 characters are required.",
+      });
+    }
+
     const existingUser = await prisma.user.findUnique({
-      where: { rollNo },
+      where: { rollNo: cleanRollNo },
     });
 
     if (existingUser) {
@@ -61,8 +80,8 @@ const registerUser = async (req, res) => {
     const user = await prisma.$transaction(async (tx) => {
       const createdUser = await tx.user.create({
         data: {
-          name,
-          rollNo,
+          name: cleanName,
+          rollNo: cleanRollNo,
           password: hashedPassword,
           role,
           branch: normalizedBranch,
@@ -99,10 +118,10 @@ const registerUser = async (req, res) => {
       }),
     });
   } catch (error) {
+    console.error("Failed to register user:", error.message);
     return res.status(500).json({
       success: false,
       message: "Failed to register user.",
-      error: error.message,
     });
   }
 };
@@ -163,10 +182,10 @@ const loginUser = async (req, res) => {
       },
     });
   } catch (error) {
+    console.error("Failed to login user:", error.message);
     return res.status(500).json({
       success: false,
       message: "Failed to login user.",
-      error: error.message,
     });
   }
 };
@@ -229,10 +248,10 @@ const changePassword = async (req, res) => {
       message: "Password updated successfully.",
     });
   } catch (error) {
+    console.error("Failed to update password:", error.message);
     return res.status(500).json({
       success: false,
       message: "Failed to update password.",
-      error: error.message,
     });
   }
 };

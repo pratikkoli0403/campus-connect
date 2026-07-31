@@ -1,7 +1,6 @@
 const http = require("http");
 const express = require("express");
 const cors = require("cors");
-const path = require("path");
 const { Server } = require("socket.io");
 require("dotenv").config();
 
@@ -15,12 +14,26 @@ const attendanceRoutes = require("./routes/attendance.routes");
 const adminRoutes = require("./routes/admin.routes");
 const authMiddleware = require("./middleware/auth.middleware");
 const setupChatSocket = require("./sockets/chat.socket");
+const { downloadUpload } = require("./controllers/upload.controller");
 
 const app = express();
 
-app.use(cors());
+if (!process.env.JWT_SECRET) {
+  throw new Error("JWT_SECRET is required.");
+}
+
+const allowedOrigins = (process.env.CORS_ORIGIN ?? "*")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin: allowedOrigins.includes("*") ? "*" : allowedOrigins,
+  })
+);
 app.use(express.json());
-app.use("/uploads", express.static(path.join(__dirname, "..", "uploads")));
+app.get("/uploads/:filename", downloadUpload);
 
 app.get("/", (req, res) => {
   res.send("new backend active");
@@ -45,7 +58,7 @@ app.get("/api/protected", authMiddleware, (req, res) => {
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*",
+    origin: allowedOrigins.includes("*") ? "*" : allowedOrigins,
     methods: ["GET", "POST"],
   },
 });

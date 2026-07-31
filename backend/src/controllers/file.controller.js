@@ -3,15 +3,8 @@ const path = require("path");
 const prisma = require("../config/prisma");
 const { uploadDir } = require("../middleware/upload.middleware");
 const { canDeleteFile, canAccessGroup } = require("../utils/permissions");
-
-function parsePositiveInt(raw) {
-  if (raw === undefined || raw === null || raw === "") {
-    return null;
-  }
-
-  const value = Number(raw);
-  return Number.isInteger(value) && value > 0 ? value : null;
-}
+const { parsePositiveInt } = require("../utils/requestValidation");
+const { getUserGroupAccess } = require("../utils/groupAccess");
 
 function parseGroupId(rawGroupId) {
   return parsePositiveInt(rawGroupId);
@@ -126,10 +119,10 @@ const uploadFile = async (req, res) => {
     });
   } catch (error) {
     removeUploadedFile(req.file);
+    console.error("Failed to upload file:", error.message);
     return res.status(500).json({
       success: false,
       message: "Failed to upload file.",
-      error: error.message,
     });
   }
 };
@@ -195,10 +188,10 @@ const getGroupFiles = async (req, res) => {
       data: files,
     });
   } catch (error) {
+    console.error("Failed to fetch files:", error.message);
     return res.status(500).json({
       success: false,
       message: "Failed to fetch files.",
-      error: error.message,
     });
   }
 };
@@ -235,6 +228,14 @@ const deleteFile = async (req, res) => {
       });
     }
 
+    const access = await getUserGroupAccess(userId, file.groupId);
+    if (!access.user || !access.canAccess) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not a member of this group.",
+      });
+    }
+
     if (!canDeleteFile({ id: userId, role }, file)) {
       return res.status(403).json({
         success: false,
@@ -267,10 +268,10 @@ const deleteFile = async (req, res) => {
       },
     });
   } catch (error) {
+    console.error("Failed to delete file:", error.message);
     return res.status(500).json({
       success: false,
       message: "Failed to delete file.",
-      error: error.message,
     });
   }
 };

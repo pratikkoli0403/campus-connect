@@ -6,15 +6,8 @@ const {
   FACULTY_ROLES,
   canDeleteMessage,
 } = require("../utils/permissions");
-
-function parsePositiveInt(raw) {
-  if (raw === undefined || raw === null || raw === "") {
-    return null;
-  }
-
-  const value = Number(raw);
-  return Number.isInteger(value) && value > 0 ? value : null;
-}
+const { parsePositiveInt } = require("../utils/requestValidation");
+const { getUserGroupAccess } = require("../utils/groupAccess");
 
 function removeAttachedFile(fileUrl) {
   if (!fileUrl || typeof fileUrl !== "string") return;
@@ -50,14 +43,26 @@ const getGroupMessages = async (req, res) => {
       });
     }
 
-    const group = await prisma.group.findUnique({
-      where: { id: groupId },
-    });
+    const access = await getUserGroupAccess(req.user?.id, groupId);
 
-    if (!group) {
+    if (!access.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Authenticated user no longer exists.",
+      });
+    }
+
+    if (!access.group) {
       return res.status(404).json({
         success: false,
         message: "Group not found.",
+      });
+    }
+
+    if (!access.canAccess) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not a member of this group.",
       });
     }
 
@@ -84,10 +89,10 @@ const getGroupMessages = async (req, res) => {
       data: messages,
     });
   } catch (error) {
+    console.error("Failed to fetch messages:", error.message);
     return res.status(500).json({
       success: false,
       message: "Failed to fetch messages.",
-      error: error.message,
     });
   }
 };
@@ -121,6 +126,14 @@ const deleteMessage = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Message not found.",
+      });
+    }
+
+    const access = await getUserGroupAccess(userId, message.groupId);
+    if (!access.user || !access.canAccess) {
+      return res.status(403).json({
+        success: false,
+        message: "You are not a member of this group.",
       });
     }
 
@@ -184,10 +197,10 @@ const deleteMessage = async (req, res) => {
       },
     });
   } catch (error) {
+    console.error("Failed to delete message:", error.message);
     return res.status(500).json({
       success: false,
       message: "Failed to delete message.",
-      error: error.message,
     });
   }
 };
