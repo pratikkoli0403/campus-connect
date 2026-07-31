@@ -33,7 +33,7 @@ app.use(
   })
 );
 app.use(express.json());
-app.get("/uploads/:filename", downloadUpload);
+app.get("/uploads/:filename", authMiddleware, downloadUpload);
 
 app.get("/", (req, res) => {
   res.send("new backend active");

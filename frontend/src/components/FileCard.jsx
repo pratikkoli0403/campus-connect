@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { Download, FileText, Loader2, MoreVertical, Trash2 } from "lucide-react";
-import { resolveFileUrl } from "../services/fileService.js";
 
 function formatFileTime(iso) {
   return new Date(iso).toLocaleDateString([], {
@@ -15,9 +14,11 @@ export default function FileCard({
   isDeleting = false,
   deleteError = "",
   onDelete,
+  onDownload,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [downloadError, setDownloadError] = useState("");
   const menuRef = useRef(null);
   const uploader = file.uploader ?? {
     id: file.uploadedBy,
@@ -86,6 +87,16 @@ export default function FileCard({
     onDelete?.(file);
   }
 
+  async function handleDownload(event) {
+    event.preventDefault();
+    setDownloadError("");
+    try {
+      await onDownload?.(file);
+    } catch (error) {
+      setDownloadError(error.message ?? "Failed to download file.");
+    }
+  }
+
   return (
     <div
       className={`group relative flex min-w-0 flex-col rounded-lg border border-[#3f4147]/80 bg-[#2b2d31] shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#5865f2]/60 hover:bg-[#32343a] hover:shadow-md ${
@@ -93,11 +104,9 @@ export default function FileCard({
       }`}
     >
       <div className="flex min-w-0 items-center gap-3 p-3">
-        <a
-          href={resolveFileUrl(file.fileUrl)}
-          target="_blank"
-          rel="noreferrer"
-          download
+        <button
+          type="button"
+          onClick={handleDownload}
           aria-label={`Download ${file.fileName}`}
           className="flex min-w-0 flex-1 items-center gap-3 rounded-md text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5865f2]/60"
         >
@@ -115,7 +124,7 @@ export default function FileCard({
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#1e1f22] text-[#949ba4] transition-colors group-hover:text-[#f2f3f5]">
             <Download className="h-4 w-4" aria-hidden />
           </span>
-        </a>
+        </button>
 
         {canDelete && (
           <div ref={menuRef} className="relative shrink-0">
@@ -195,6 +204,11 @@ export default function FileCard({
       {deleteError && (
         <p role="alert" className="px-3 pb-3 text-xs text-[#f23f42]">
           {deleteError}
+        </p>
+      )}
+      {downloadError && (
+        <p role="alert" className="px-3 pb-3 text-xs text-[#f23f42]">
+          {downloadError}
         </p>
       )}
     </div>

@@ -1,4 +1,6 @@
 const prisma = require("../config/prisma");
+const jwt = require("jsonwebtoken");
+const { getUserGroupAccess } = require("../utils/groupAccess");
 
 /** @type {Map<number, Set<string>>} */
 const onlineUsers = new Map();
@@ -65,28 +67,35 @@ function emitToGroupExceptSender(socket, groupId, event, data) {
 }
 
 const setupChatSocket = (io) => {
+  io.use((socket, next) => {
+    try {
+      const token = socket.handshake.auth?.token;
+      if (!token) return next(new Error("Authentication required."));
+      socket.data.authUser = jwt.verify(token, process.env.JWT_SECRET);
+      return next();
+    } catch {
+      return next(new Error("Invalid or expired token."));
+    }
+  });
+
   io.on("connection", (socket) => {
     console.log("Socket connected:", socket.id);
 
     socket.emit("onlineUsers", getOnlineUserIds());
 
-    socket.on("registerUser", ({ userId: rawUserId }) => {
-      const userId = Number(rawUserId);
-      if (!Number.isInteger(userId) || userId < 1) {
-        return;
-      }
-
-      if (socket.data.userId != null && socket.data.userId !== userId) {
-        removeOnlineUser(io, socket);
-      }
-
+    socket.on("registerUser", () => {
+      const userId = Number(socket.data.authUser?.id);
+      if (!Number.isInteger(userId) || userId < 1) return;
       addOnlineUser(io, socket, userId);
     });
 
-    socket.on("joinGroup", ({ groupId }) => {
-      if (groupId == null || groupId === "") {
-        return;
-      }
+    socket.on("joinGroup", async ({ groupId: rawGroupId }) => {
+      const groupId = Number(rawGroupId);
+      const userId = Number(socket.data.authUser?.id);
+      if (!Number.isInteger(groupId) || groupId < 1 || !Number.isInteger(userId)) return;
+
+      const access = await getUserGroupAccess(userId, groupId);
+      if (!access.canAccess) return;
 
       const room = String(groupId);
       socket.join(room);
@@ -95,8 +104,7 @@ const setupChatSocket = (io) => {
 
     socket.on("sendMessage", async (message) => {
       try {
-        const { content, senderId: rawSenderId, groupId: rawGroupId } =
-          message ?? {};
+        const { content, groupId: rawGroupId } = message ?? {};
 
         if (
           content == null ||
@@ -106,15 +114,11 @@ const setupChatSocket = (io) => {
           return;
         }
 
-        if (rawSenderId == null || rawSenderId === "") {
-          return;
-        }
-
         if (rawGroupId == null || rawGroupId === "") {
           return;
         }
 
-        const senderId = Number(rawSenderId);
+        const senderId = Number(socket.data.authUser?.id);
         const groupId = Number(rawGroupId);
 
         if (!Number.isInteger(senderId) || senderId < 1) {
@@ -124,6 +128,9 @@ const setupChatSocket = (io) => {
         if (!Number.isInteger(groupId) || groupId < 1) {
           return;
         }
+
+        const access = await getUserGroupAccess(senderId, groupId);
+        if (!access.canAccess) return;
 
         const savedMessage = await prisma.message.create({
           data: {

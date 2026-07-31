@@ -92,25 +92,44 @@ const uploadFile = async (req, res) => {
       });
     }
 
-    const file = await prisma.file.create({
-      data: {
-        fileName: req.file.originalname,
-        fileUrl: `/uploads/${path.basename(req.file.filename)}`,
-        mimeType: req.file.mimetype,
-        uploadedBy: userId,
-        groupId,
-      },
-      include: {
-        uploader: {
-          select: {
-            id: true,
-            name: true,
-            rollNo: true,
-            role: true,
+    const fileUrl = `/uploads/${path.basename(req.file.filename)}`;
+    const { file, message } = await prisma.$transaction(async (tx) => {
+      const createdFile = await tx.file.create({
+        data: {
+          fileName: req.file.originalname,
+          fileUrl,
+          mimeType: req.file.mimetype,
+          uploadedBy: userId,
+          groupId,
+        },
+        include: {
+          uploader: {
+            select: { id: true, name: true, rollNo: true, role: true },
           },
         },
-      },
+      });
+      const createdMessage = await tx.message.create({
+        data: {
+          content: `Shared a file: ${req.file.originalname}`,
+          fileUrl,
+          fileName: req.file.originalname,
+          senderId: userId,
+          groupId,
+        },
+        include: {
+          sender: {
+            select: { id: true, name: true, rollNo: true, role: true },
+          },
+        },
+      });
+      return { file: createdFile, message: createdMessage };
     });
+
+    const io = req.app.get("io");
+    if (io) {
+      io.to(String(groupId)).emit("file_created", file);
+      io.to(String(groupId)).emit("receiveMessage", message);
+    }
 
     return res.status(201).json({
       success: true,
@@ -243,8 +262,16 @@ const deleteFile = async (req, res) => {
       });
     }
 
-    await prisma.file.delete({
-      where: { id: fileId },
+    const deletedMessages = await prisma.$transaction(async (tx) => {
+      const messages = await tx.message.findMany({
+        where: { groupId: file.groupId, fileUrl: file.fileUrl },
+        select: { id: true },
+      });
+      await tx.message.deleteMany({
+        where: { groupId: file.groupId, fileUrl: file.fileUrl },
+      });
+      await tx.file.delete({ where: { id: fileId } });
+      return messages;
     });
 
     removeStoredFile(file.fileUrl);
@@ -256,6 +283,13 @@ const deleteFile = async (req, res) => {
         groupId: file.groupId,
         fileUrl: file.fileUrl,
       });
+      for (const message of deletedMessages) {
+        io.to(String(file.groupId)).emit("message_deleted", {
+          id: message.id,
+          groupId: file.groupId,
+          fileUrl: file.fileUrl,
+        });
+      }
     }
 
     return res.status(200).json({

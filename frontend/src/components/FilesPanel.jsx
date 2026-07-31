@@ -10,6 +10,7 @@ export default function FilesPanel({
   deleteErrorFileId,
   fileDeleteError,
   onDeleteFile,
+  onDownloadFile,
 }) {
   return (
     <section className="mx-2 mb-4 rounded-lg border border-[#1e1f22]/70 bg-[#313338] p-3 shadow-sm ring-1 ring-white/[0.02] sm:mx-4 sm:p-4">
@@ -68,6 +69,7 @@ export default function FilesPanel({
                   : ""
               }
               onDelete={onDeleteFile}
+              onDownload={onDownloadFile}
             />
           ))}
         </div>

@@ -92,6 +92,11 @@ const createAnnouncement = async (req, res) => {
       },
     });
 
+    const io = req.app.get("io");
+    if (io) {
+      io.to(String(groupId)).emit("announcement_created", announcement);
+    }
+
     return res.status(201).json({
       success: true,
       message: "Announcement created successfully.",

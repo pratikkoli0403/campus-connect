@@ -167,6 +167,11 @@ async function importStudentsFromFile(file) {
 
     if (existingUser) {
       summary.skippedCount += 1;
+      summary.errors.push({
+        row: row.rowNumber,
+        rollNo: row.rollNo,
+        message: "A student with this roll number already exists.",
+      });
       continue;
     }
 
@@ -175,6 +180,15 @@ async function importStudentsFromFile(file) {
       normalizedBranch,
       normalizedYear
     );
+    if (!matchingGroup) {
+      summary.skippedCount += 1;
+      summary.errors.push({
+        row: row.rowNumber,
+        rollNo: row.rollNo,
+        message: "No matching group was found for this branch and year.",
+      });
+      continue;
+    }
     const temporaryPassword = generateTemporaryPassword();
     const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
 
@@ -192,14 +206,9 @@ async function importStudentsFromFile(file) {
           select: USER_SELECT,
         });
 
-        if (matchingGroup) {
-          await tx.groupMember.create({
-            data: {
-              userId: user.id,
-              groupId: matchingGroup.id,
-            },
-          });
-        }
+        await tx.groupMember.create({
+          data: { userId: user.id, groupId: matchingGroup.id },
+        });
 
         return user;
       });
@@ -230,19 +239,17 @@ async function importStudentsFromFile(file) {
           : null,
       });
 
-      if (!matchingGroup) {
-        summary.errors.push({
-          row: row.rowNumber,
-          rollNo: row.rollNo,
-          message: "Student imported, but no matching group was found.",
-        });
-      }
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
       ) {
         summary.skippedCount += 1;
+        summary.errors.push({
+          row: row.rowNumber,
+          rollNo: row.rollNo,
+          message: "A student with this roll number already exists.",
+        });
         continue;
       }
 

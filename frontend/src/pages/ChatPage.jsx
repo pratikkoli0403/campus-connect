@@ -36,7 +36,7 @@ import {
   getFiles,
   uploadFile,
   deleteFile,
-  resolveFileUrl,
+  downloadFile,
 } from "../services/fileService.js";
 import {
   getMyAttendance,
@@ -273,10 +273,12 @@ function MessageRow({
   isDeleting,
   deleteError,
   onDelete,
+  onDownload,
 }) {
   const { sender, content, createdAt } = message;
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [downloadError, setDownloadError] = useState("");
   const menuRef = useRef(null);
   const bubbleBase =
     "max-w-[min(92vw,31rem)] rounded-2xl px-3 py-2 text-sm leading-relaxed shadow-sm sm:max-w-[min(85%,31rem)] sm:px-3.5 sm:text-[15px] md:max-w-lg";
@@ -337,6 +339,15 @@ function MessageRow({
     event.stopPropagation();
     setConfirmOpen(false);
     onDelete?.(message);
+  }
+
+  async function handleDownload() {
+    setDownloadError("");
+    try {
+      await onDownload?.(message);
+    } catch (error) {
+      setDownloadError(error.message ?? "Failed to download file.");
+    }
   }
 
   const actions = canDelete ? (
@@ -446,16 +457,14 @@ function MessageRow({
             >
               <p className="break-words">{content}</p>
               {message.fileName && (
-                <a
-                  href={message.fileUrl ? resolveFileUrl(message.fileUrl) : undefined}
-                  target="_blank"
-                  rel="noreferrer"
-                  download
+                <button
+                  type="button"
+                  onClick={handleDownload}
                   className="mt-2 flex min-w-0 items-center gap-2 rounded-lg bg-white/10 px-2.5 py-2 text-left text-xs text-white/90 ring-1 ring-white/15 transition-colors hover:bg-white/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
                 >
                   <Paperclip className="h-4 w-4 shrink-0" aria-hidden />
                   <span className="truncate font-medium">{message.fileName}</span>
-                </a>
+                </button>
               )}
             </div>
           </div>
@@ -467,6 +476,7 @@ function MessageRow({
               {deleteError}
             </p>
           )}
+          {downloadError && <p role="alert" className="mt-1 px-1 text-xs text-[#f23f42]">{downloadError}</p>}
           {!showHeader && (
             <span className="mt-0.5 px-1 text-[10px] text-[#949ba4] opacity-0 transition-opacity group-hover:opacity-100">
               {formatMessageTime(createdAt)}
@@ -513,16 +523,14 @@ function MessageRow({
           >
             <p className="break-words">{content}</p>
             {message.fileName && (
-              <a
-                href={message.fileUrl ? resolveFileUrl(message.fileUrl) : undefined}
-                target="_blank"
-                rel="noreferrer"
-                download
+              <button
+                type="button"
+                onClick={handleDownload}
                 className="mt-2 flex min-w-0 items-center gap-2 rounded-lg border border-[#1e1f22]/50 bg-[#2b2d31] px-2.5 py-2 text-left text-xs text-[#dbdee1] transition-colors hover:border-[#5865f2]/50 hover:bg-[#32343a] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5865f2]/60"
               >
                 <Paperclip className="h-4 w-4 shrink-0 text-[#b8c0ff]" aria-hidden />
                 <span className="truncate font-medium">{message.fileName}</span>
-              </a>
+              </button>
             )}
           </div>
           {actions}
@@ -535,6 +543,7 @@ function MessageRow({
             {deleteError}
           </p>
         )}
+        {downloadError && <p role="alert" className="mt-1 px-0.5 text-xs text-[#f23f42]">{downloadError}</p>}
       </div>
     </div>
   );
@@ -847,6 +856,7 @@ function ChatPage() {
   const [membersOpen, setMembersOpen] = useState(false);
   const [groupMembers, setGroupMembers] = useState([]);
   const [membersLoading, setMembersLoading] = useState(false);
+  const [membersRefreshKey, setMembersRefreshKey] = useState(0);
   const [typingUsers, setTypingUsers] = useState(() => new Map());
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -1034,6 +1044,7 @@ function ChatPage() {
   useEffect(() => {
     if (user?.id == null) return;
 
+    socket.auth = { token: localStorage.getItem("token") };
     const register = () => {
       socket.emit("registerUser", { userId: user.id });
     };
@@ -1042,9 +1053,10 @@ function ChatPage() {
       setOnlineUserIds(new Set((ids ?? []).map(Number)));
     };
 
-    register();
     socket.on("connect", register);
     socket.on("onlineUsers", onOnlineUsers);
+    socket.connect();
+    if (socket.connected) register();
 
     return () => {
       socket.off("connect", register);
@@ -1174,6 +1186,24 @@ function ChatPage() {
       });
     };
 
+    const onAnnouncementCreated = (announcement) => {
+      if (Number(announcement?.groupId) !== Number(selectedGroupId)) return;
+      setAnnouncements((prev) =>
+        prev.some((item) => Number(item.id) === Number(announcement.id))
+          ? prev
+          : [announcement, ...prev]
+      );
+    };
+
+    const onFileCreated = (file) => {
+      if (Number(file?.groupId) !== Number(selectedGroupId)) return;
+      setFiles((prev) =>
+        prev.some((item) => Number(item.id) === Number(file.id))
+          ? prev
+          : [file, ...prev]
+      );
+    };
+
     const onMessageDeleted = (payload) => {
       const deletedId = Number(payload?.id);
       const groupId = Number(payload?.groupId);
@@ -1248,12 +1278,16 @@ function ChatPage() {
     };
 
     socket.on("receiveMessage", onReceiveMessage);
+    socket.on("announcement_created", onAnnouncementCreated);
+    socket.on("file_created", onFileCreated);
     socket.on("message_deleted", onMessageDeleted);
     socket.on("announcement_deleted", onAnnouncementDeleted);
     socket.on("file_deleted", onFileDeleted);
 
     return () => {
       socket.off("receiveMessage", onReceiveMessage);
+      socket.off("announcement_created", onAnnouncementCreated);
+      socket.off("file_created", onFileCreated);
       socket.off("message_deleted", onMessageDeleted);
       socket.off("announcement_deleted", onAnnouncementDeleted);
       socket.off("file_deleted", onFileDeleted);
@@ -1342,7 +1376,7 @@ function ChatPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedGroupId]);
+  }, [selectedGroupId, membersRefreshKey]);
 
   useEffect(() => {
     if (messages.length === 0) {
@@ -1444,7 +1478,11 @@ function ChatPage() {
         groupId: selectedGroup.id,
         file: selectedFile,
       });
-      setFiles((prev) => [uploaded, ...prev]);
+      setFiles((prev) =>
+        prev.some((file) => Number(file.id) === Number(uploaded.id))
+          ? prev
+          : [uploaded, ...prev]
+      );
     } catch (err) {
       setFileUploadError(
         err.response?.data?.message ?? "Failed to upload file."
@@ -1514,6 +1552,7 @@ function ChatPage() {
       const result = await importStudents(studentImportFile);
       setStudentImportResult(result);
       setStudentImportFile(null);
+      setMembersRefreshKey((key) => key + 1);
     } catch (err) {
       setStudentImportError(
         err.response?.data?.message ?? "Failed to import students."
@@ -2161,7 +2200,8 @@ function ChatPage() {
                 deletingFileId={deletingFileId}
                 deleteErrorFileId={deleteErrorFileId}
                 fileDeleteError={fileDeleteError}
-                onDeleteFile={handleDeleteFile}
+              onDeleteFile={handleDeleteFile}
+                onDownloadFile={downloadFile}
               />
             ))}
             {activePanel === "chat" && (
@@ -2204,6 +2244,7 @@ function ChatPage() {
                           : ""
                       }
                       onDelete={handleDeleteMessage}
+                      onDownload={downloadFile}
                     />
                   );
                 })}

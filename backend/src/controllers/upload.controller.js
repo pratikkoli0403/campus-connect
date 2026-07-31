@@ -1,36 +1,15 @@
 const path = require("path");
-const jwt = require("jsonwebtoken");
 const prisma = require("../config/prisma");
 const { uploadDir } = require("../middleware/upload.middleware");
 const { getUserGroupAccess } = require("../utils/groupAccess");
 
-function extractToken(req) {
-  const authHeader = req.headers.authorization;
-  if (authHeader) {
-    const [scheme, token] = authHeader.split(" ");
-    if (scheme === "Bearer" && token) return token;
-  }
-
-  return typeof req.query.token === "string" ? req.query.token : null;
-}
-
 async function downloadUpload(req, res) {
   try {
-    const token = extractToken(req);
-    if (!token) {
+    const userId = req.user?.id;
+    if (userId == null) {
       return res.status(401).json({
         success: false,
-        message: "Authorization token is missing.",
-      });
-    }
-
-    let decoded;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET);
-    } catch {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid or expired token.",
+        message: "User could not be authenticated.",
       });
     }
 
@@ -59,7 +38,7 @@ async function downloadUpload(req, res) {
       });
     }
 
-    const access = await getUserGroupAccess(decoded.id, file.groupId);
+    const access = await getUserGroupAccess(userId, file.groupId);
     if (!access.user || !access.canAccess) {
       return res.status(403).json({
         success: false,
